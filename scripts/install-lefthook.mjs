@@ -322,6 +322,15 @@ function installLockStat(lockPath) {
   }
 }
 
+function sameFileIdentity(left, right) {
+  // Windows path-based stats report dev 0 while handle-based stats report the
+  // volume serial, so only the file id (ino) is comparable there; on POSIX
+  // both dev and ino come from the same lstat/fstat family and stay stable.
+  return process.platform === 'win32'
+    ? left.ino === right.ino
+    : left.dev === right.dev && left.ino === right.ino
+}
+
 function parseInstallLock(record) {
   const match = /^([1-9]\d*) ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\n$/i.exec(record)
   if (match === null) return undefined
@@ -362,8 +371,7 @@ function releaseInstallLock(lockPath, ownedRecord, ownedStat) {
     currentStat === undefined
     || !currentStat.isFile()
     || currentStat.isSymbolicLink()
-    || currentStat.dev !== ownedStat.dev
-    || currentStat.ino !== ownedStat.ino
+    || !sameFileIdentity(currentStat, ownedStat)
     || readInstallLock(lockPath) !== ownedRecord
   ) {
     throw lockOwnershipChangedError(lockPath)
@@ -402,8 +410,7 @@ async function acquireInstallLock(commonDirectory) {
         publishedStat === undefined
         || !publishedStat.isFile()
         || publishedStat.isSymbolicLink()
-        || publishedStat.dev !== ownedStat.dev
-        || publishedStat.ino !== ownedStat.ino
+        || !sameFileIdentity(publishedStat, ownedStat)
       ) {
         throw lockOwnershipChangedError(lockPath)
       }
