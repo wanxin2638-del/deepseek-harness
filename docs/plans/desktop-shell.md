@@ -69,11 +69,20 @@
 **F10 · 原生依赖（装配 ABI 风险）** — `pnpm-workspace.yaml allowBuilds`
 - 运行时闭包含原生模块：`koffi`（JSONL `MoveFileExW` write-through 发布）、`fs-ext`（session 写锁 `LockFileEx`）、`node-addon-require-builtin`（win32-x64-msvc prebuild）。`node-pty`（PTY）不在 web profile 闭包内。
 - **这些模块的 ABI 兼容性必须实测**：若走 `ELECTRON_RUN_AS_NODE` 复用 Electron 内置 Node，其 `process.versions.modules`（ABI）与系统 Node 22 不同，非 N-API 的原生模块可能无法加载。→ 见决策 D3 与 P1.4 探针。
+- **P1.1 复核**：`fs-ext` 用 `nan` + `node-gyp configure build`（`node_modules/.pnpm/fs-ext@2.1.1/.../package.json`），是非 N-API 的裸 V8 binding → **ABI 高风险**，`ELECTRON_RUN_AS_NODE` 下极可能 `ERR_DLOPEN`，D2 首选大概率不成立。`koffi` 是 Node-API（cnoke `"napi": 8`），`node-addon-require-builtin` 是 Node-API addon（prebuild `win32-x64-msvc`）→ 二者 ABI 兼容。当前安装 Node v24 ABI 137；Electron 内置 Node ABI 不同 → 独立 node.exe 回退（体积 +~50MB）是 P1.4 探针的高概率结论。
+
+**F11 · 应用层最低文件面与根 gate 扫描面** — P1.1 复核
+- `apps/cli` 与 `apps/web` 的最低文件面：`package.json`（`name` `@deepseek-ai/dsh-*`、`"type": "module"`、`publishConfig.access: public`、`repository.directory`、`files`、`dependencies`/`devDependencies`）、`tsconfig.json`（extends `../../tsconfig.base.json`，`rootDir`/`outDir: lib/types`，`references` 指向 workspace 依赖）、`src/`、`tests/`、`README.md`。无包级 `.gitignore`（`lib/` 与 `apps/web/dist/` 由根 `.gitignore` 兜底）。
+- **`verify-application-entrypoints`**（`scripts/verify-application-entrypoints.ts`）扫描 `apps/*/package.json` 的 `bin`：只允许 `apps/cli` 与 webworker-packer 的已分类 bin；`apps/desktop` **不得声明 `bin`**。同时扫描 `apps/**/*.{ts,js,mjs,cjs}` 的 `#!` shebang（排除 `node_modules`/`lib`/`dist`）——`src/main.ts` 不能以 `#!` 开头。
+- **`verify-package-dependencies`**：每个新包需要 `@deepseek-ai/cordis` 的 peer+dev 依赖（若参与 cordis）。Electron 壳不加载 cordis 插件，仅作为独立宿主，故 `apps/desktop` 可不声明 cordis，但要过 `hygiene` 的依赖校验（`verify-package-dependencies` 与 `verify-dsh-package-licenses`）。
+- **`typecheck`**：新 `apps/desktop` 需被某 tsconfig 项目引用或独立编译；`apps/web` 与 `apps/cli` 不在同一 solution 根（各自独立 `tsconfig.json`），`apps/desktop` 同法独立 `tsconfig.json`。
+- **`doc-sync`/`website`**：`docs/plans/` 不注册 leaf、不进 website 投影（§1 已声明）；新增 `apps/desktop/README*` 需按 `verify-package-readme-model-experience` 与 `verify-package-readme-limitations` 处理（包 README 属 package README tier，需 Model Experience 段落与 Known Limitations）。
+- **`clean`**（`pnpm run clean`）：清理 build 产物与已删包的残留；需覆盖 `apps/desktop` 的 `lib/`、`.runtime/`、`release/`（P1.8 处置）。
+- **`duplication`**（跨文件 TS 克隆检测）：`src/main.ts` 的 spawn/就绪解析/清理逻辑需避免与仓库其它子进程编排克隆，P1.8 证明或排除。
 
 ## 4. 目标架构
 
 ```
-┌─ DeepSeek Harness Desktop（electron.exe，壳主进程）──────────────────┐
 │  main.js（apps/desktop/src/main.ts 编译）                             │
 │  · resolveBackendLaunch()：dev 态 apps/desktop/.runtime/；            │
 │    打包态 process.resourcesPath/dsh-runtime/                          │
@@ -209,7 +218,7 @@
 
 | 任务 | 状态 | 完成日期 | 备注 |
 |---|---|---|---|
-| P1.1 契约调研收尾 | 待执行 | | |
+| P1.1 契约调研收尾 | 已完成 | 2026-09-06 | 见 §3 复核记录 |
 | P1.2 工程骨架 | 待执行 | | |
 | P1.3 主进程 v1 | 待执行 | | |
 | P1.4 后端装配 | 待执行 | | |
