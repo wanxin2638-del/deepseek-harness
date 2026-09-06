@@ -68,8 +68,7 @@
 
 **F10 · 原生依赖（装配 ABI 风险）** — `pnpm-workspace.yaml allowBuilds`
 - 运行时闭包含原生模块：`koffi`（JSONL `MoveFileExW` write-through 发布）、`fs-ext`（session 写锁 `LockFileEx`）、`node-addon-require-builtin`（win32-x64-msvc prebuild）。`node-pty`（PTY）不在 web profile 闭包内。
-- **这些模块的 ABI 兼容性必须实测**：若走 `ELECTRON_RUN_AS_NODE` 复用 Electron 内置 Node，其 `process.versions.modules`（ABI）与系统 Node 22 不同，非 N-API 的原生模块可能无法加载。→ 见决策 D3 与 P1.4 探针。
-- **P1.1 复核**：`fs-ext` 用 `nan` + `node-gyp configure build`（`node_modules/.pnpm/fs-ext@2.1.1/.../package.json`），是非 N-API 的裸 V8 binding → **ABI 高风险**，`ELECTRON_RUN_AS_NODE` 下极可能 `ERR_DLOPEN`，D2 首选大概率不成立。`koffi` 是 Node-API（cnoke `"napi": 8`），`node-addon-require-builtin` 是 Node-API addon（prebuild `win32-x64-msvc`）→ 二者 ABI 兼容。当前安装 Node v24 ABI 137；Electron 内置 Node ABI 不同 → 独立 node.exe 回退（体积 +~50MB）是 P1.4 探针的高概率结论。
+- **P1.4 实测裁决 D2（本行替代旧预测）**：系统 Node v24.0.0（ABI 137）跑装配态 `lib/bin.js` → 就绪行 + `GET /` 401 + 全程无 `ERR_DLOPEN`，探针通过。Electron 44.2.0 内置 Node v24.20.0（ABI 149）经 `ELECTRON_RUN_AS_NODE=1` 跑同一闭包 → `fs-ext` 加载即 `ERR_DLOPEN_FAILED`（`NODE_MODULE_VERSION 149`，nan+node-gyp 非 N-API，栈在 `fs-ext.js:22`）。`koffi`（cnoke `"napi": 8`）与 `node-addon-require-builtin`（N-API prebuild）未报错，ABI 兼容结论成立。→ **D2 首选不成立，回退独立 node.exe**（shell 打包路径 `resources/node/node.exe`，P1.5 已按此实现，体积 +~50MB）。
 
 **F11 · 应用层最低文件面与根 gate 扫描面** — P1.1 复核
 - `apps/cli` 与 `apps/web` 的最低文件面：`package.json`（`name` `@deepseek-ai/dsh-*`、`"type": "module"`、`publishConfig.access: public`、`repository.directory`、`files`、`dependencies`/`devDependencies`）、`tsconfig.json`（extends `../../tsconfig.base.json`，`rootDir`/`outDir: lib/types`，`references` 指向 workspace 依赖）、`src/`、`tests/`、`README.md`。无包级 `.gitignore`（`lib/` 与 `apps/web/dist/` 由根 `.gitignore` 兜底）。
@@ -221,7 +220,7 @@
 | P1.1 契约调研收尾 | 已完成 | 2026-09-06 | 见 §3 复核记录 |
 | P1.2 工程骨架 | 已完成 | 2026-09-06 | 见 §8 备注；Electron 44.2.0 经 npmmirror 装妥 |
 | P1.3 主进程 v1 | 已完成 | 2026-09-06 | dev 源码态后端；就绪解析/登录交换/退出清理已实测 |
-| P1.4 后端装配 | 待执行 | | |
+| P1.4 后端装配 | 已完成 | 2026-09-07 | `deploy-root` 闭包清单（228 个 workspace 包）+ `scripts/assemble.mjs`（deploy→restoreLegacyHoists→materializeStagedLinks→摘要→ABI 探针）；`.runtime/` 212.1 MB；D2 已由探针裁决（见 F10） |
 | P1.5 主进程 v2 | 待执行 | | |
 | P1.6 打包 | 待执行 | | |
 | P1.7 冷启动验证 | 待执行 | | |

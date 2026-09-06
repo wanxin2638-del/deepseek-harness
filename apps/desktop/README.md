@@ -4,7 +4,7 @@ Windows portable Electron shell hosting the official DeepSeek Harness Web backen
 
 ## Status
 
-Working plan: [docs/plans/desktop-shell.md](../../docs/plans/desktop-shell.md). This package is under construction.
+Working plan: [docs/plans/desktop-shell.md](../../docs/plans/desktop-shell.md). This package is under construction; the shell hosts the source backend in dev and the assembled backend once `assemble` has staged it.
 
 ## Usage
 
@@ -12,5 +12,5 @@ Prerequisites: a built backend. Run `pnpm --filter @deepseek-ai/dsh-desktop asse
 
 ## Known Limitations and Deferred Work
 
-- Under construction; the shell currently opens a blank window and does not yet host the backend.
+- The shell is a development host; the assembled backend runtime (`assemble`) is in place, but packaging (`dist`) and cold-start verification are still pending.
 - No code signing, auto-update, or production icon (tracked by the working plan).
