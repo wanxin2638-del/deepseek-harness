@@ -1,10 +1,11 @@
 import { app, BrowserWindow, dialog, shell } from 'electron'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { startBackend, sourceLaunchSpec, systemNodePath, type BackendLaunchSpec, type BackendSession } from './backend.ts'
+import { assembledLaunchSpec, startBackend, systemNodePath, type BackendLaunchSpec, type BackendSession } from './backend.ts'
 import { fileLog, type LogSink } from './log.ts'
 
 const repoRoot = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..')
+const devRuntimeRoot = resolve(repoRoot, 'apps/desktop/.runtime')
 
 function parsePortOverride(argv: string[]): number | undefined {
   const index = argv.indexOf('--port')
@@ -25,22 +26,22 @@ const state: DesktopState = {}
 
 let quitting = false
 
+/** The staged closure in dev (.runtime) or packaged (resources/dsh-runtime), hosted by the matching node runtime (D2). */
 function resolveBackendLaunch(portOverride: number | undefined): BackendLaunchSpec {
-  const spec = sourceLaunchSpec(repoRoot, systemNodePath())
-  if (portOverride === undefined) return spec
-  const lastPort = spec.args.lastIndexOf('--port')
-  if (lastPort !== -1) {
-    spec.args.splice(lastPort, 2)
-  }
-  spec.args.push('--port', String(portOverride))
-  return spec
+  const packaged = app.isPackaged
+  const runtimeRoot = packaged ? resolve(process.resourcesPath, 'dsh-runtime') : devRuntimeRoot
+  // ELECTRON_RUN_AS_NODE is ABI-incompatible with fs-ext (P1.4 probe); the
+  // packaged payload ships a standalone node.exe beside the runtime.
+  const nodePath = packaged ? resolve(process.resourcesPath, 'node', 'node.exe') : systemNodePath()
+  return assembledLaunchSpec(runtimeRoot, nodePath, portOverride ?? 0)
 }
 
-async function startBackendProcess(portOverride: number | undefined): Promise<BackendSession> {
+function startBackendProcess(portOverride: number | undefined): BackendSession {
   const spec = resolveBackendLaunch(portOverride)
   const session = startBackend({
     spec,
-    env: { ...process.env },
+    // F4: DSH_HOME is bootstrap-only; the shell owns it, .env cannot.
+    env: { ...process.env, DSH_HOME: resolve(app.getPath('userData'), 'dsh-home') },
     onLog: chunk => state.backendLog?.write(chunk),
     onReady: (url) => {
       const win = BrowserWindow.getAllWindows()[0]

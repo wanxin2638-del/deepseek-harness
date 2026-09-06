@@ -1,4 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 export interface BackendLaunchSpec {
@@ -117,6 +118,7 @@ export function startBackend(options: BackendOptions): BackendSession {
   return { handle: { child, url: '' }, ready, dispose }
 }
 
+/** Resolve the system node runtime that hosts the backend in dev mode. */
 export function systemNodePath(env: NodeJS.ProcessEnv = process.env): string {
   const direct = env.npm_node_execpath
   if (direct !== undefined && direct.length > 0 && direct !== 'node') return direct
@@ -136,10 +138,25 @@ export function systemNodePath(env: NodeJS.ProcessEnv = process.env): string {
   return 'node'
 }
 
-export function sourceLaunchSpec(root: string, nodePath: string): BackendLaunchSpec {
+/**
+ * The assembled closure launch: `<runtimeRoot>/node_modules/@deepseek-ai/dsh/lib/bin.js`
+ * run from a cwd detached from the repository. `runtimeRoot` is the dev staging
+ * (apps/desktop/.runtime) or the packaged resources/dsh-runtime. The web profile
+ * needs no extra node flags: the bin is compiled ESM (F7).
+ * @param runtimeRoot - directory holding node_modules with the @deepseek-ai/dsh closure.
+ * @param nodePath - absolute node executable hosting the backend.
+ * @param port - `0` for an OS-assigned port (D3), or a shell-level override for debugging.
+ */
+export function assembledLaunchSpec(runtimeRoot: string, nodePath: string, port: number = 0): BackendLaunchSpec {
+  const bin = resolve(runtimeRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+  if (!existsSync(bin)) {
+    throw new Error(
+      `backend runtime entry missing at ${bin}; run pnpm --filter @deepseek-ai/dsh-desktop assemble first`,
+    )
+  }
   return {
     command: nodePath,
-    args: ['--import', 'tsx/esm', resolve(root, 'apps/cli/src/bin.ts'), '--profile', 'web', '--no-open', '--port', '0'],
-    cwd: root,
+    args: [bin, '--profile', 'web', '--no-open', '--port', String(port)],
+    cwd: runtimeRoot,
   }
 }

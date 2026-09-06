@@ -109,7 +109,7 @@
 | # | 决策 | 选项与推荐 | 依据 |
 |---|---|---|---|
 | D1 | 壳工程位置 | 仓库 `apps/desktop`，包名 `@deepseek-ai/dsh-desktop`（`pnpm-workspace.yaml` 已 glob `apps/*`） | 与 apps/cli、apps/web 并列的应用层；壳非插件 |
-| D2 | 后端 Node 运行时 | **首选 `ELECTRON_RUN_AS_NODE=1`** 复用 Electron 内置 Node；若 P1.4 探针证明 ABI 不兼容（F10）→ 回退随包便携 node.exe | 体积最小；ABI 风险见 F10 |
+| D2 | 后端 Node 运行时 | **已裁决：随包独立 node.exe**（`ELECTRON_RUN_AS_NODE` 首选不成立，P1.4 探针实证） | P1.4 探针：系统 Node ABI 137 通过；Electron 内置 Node ABI 149 下 `fs-ext` `ERR_DLOPEN_FAILED`（详见 F10） |
 | D3 | 后端启动命令 | `spawn(<node>, [<bin.js>, '--profile', 'web', '--no-open', '--port', '0'])` | F1/F3/F7；`--port 0` 由 OS 分配，就绪行给出实际端口，天然免冲突 |
 | D4 | 用户数据 | `DSH_HOME = app.getPath('userData')/dsh-home`，壳 env 注入 | F4；隔离用户 patch / sessions / 凭据 |
 | D5 | 登录交换 | `loadURL(authenticatedUrl)` 一次完成 | F2/F5 |
@@ -221,10 +221,17 @@
 | P1.2 工程骨架 | 已完成 | 2026-09-06 | 见 §8 备注；Electron 44.2.0 经 npmmirror 装妥 |
 | P1.3 主进程 v1 | 已完成 | 2026-09-06 | dev 源码态后端；就绪解析/登录交换/退出清理已实测 |
 | P1.4 后端装配 | 已完成 | 2026-09-07 | `deploy-root` 闭包清单（228 个 workspace 包）+ `scripts/assemble.mjs`（deploy→restoreLegacyHoists→materializeStagedLinks→摘要→ABI 探针）；`.runtime/` 212.1 MB；D2 已由探针裁决（见 F10） |
-| P1.5 主进程 v2 | 待执行 | | |
+| P1.5 主进程 v2 | 已完成 | 2026-09-07 | `resolveBackendLaunch()` 切装配态（dev `.runtime/`、打包 `resources/dsh-runtime` + `resources/node/node.exe`）；`DSH_HOME = userData/dsh-home` env 注入；dev 实测：就绪行来自 `.runtime` 后端、`dsh-home` 生成、关窗无残留 |
 | P1.6 打包 | 待执行 | | |
 | P1.7 冷启动验证 | 待执行 | | |
 | P1.8 收尾 | 待执行 | | |
+
+### 交接记录（2026-09-07 · 换机继续用）
+
+- **已提交**：P1.1–P1.5 全部入库；本分支 `dev`。下一台机器：`git pull` → `pnpm install` → `pnpm run build` + `pnpm run build:web` → `pnpm --filter @deepseek-ai/dsh-desktop assemble` → `pnpm --filter @deepseek-ai/dsh-desktop start`（`.runtime/` 与 `release/` 是本机产物，不入库，需重新 assemble）。
+- **环境事实（本机）**：Node v24.0.0 ABI 137；Electron 44.2.0 内置 Node v24.20.0 ABI 149（D2 因此回退独立 node.exe）；pnpm v11.7.0（`pnpm.cmd`，pwsh 禁脚本）；electron 二进制下载不可达时 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`，必要时代理 127.0.0.1:7897；npm registry 直连可达。
+- **注意事项**：`assemble.mjs` 的 deploy 目标必须传绝对路径（相对路径的 legacy deploy 会在 workspace 包内生成 junk 树——本次已清理 `vendor/schemastery/apps` 残留，勿再触发）；探针旗标经 pnpm 转发形如 `pnpm --filter @deepseek-ai/dsh-desktop run assemble -- --electron-probe`；PowerShell 下 `pnpm.cmd ... 2>&1` 会把 pnpm 的 stderr banner 显示为 NativeCommandError（属误报，判定退出码用 `1> out 2> err; $LASTEXITCODE`）。
+- **待办**：P1.6 electron-builder portable exe（extraResources：`.runtime/` → `resources/dsh-runtime` + node.exe → `resources/node/node.exe`，均解包不进 asar；`npmRebuild: false`；target `portable`，nsis 下载失败降级 `dir`）；P1.7 冷启动验证（`docs/plans/notes/verification-shell.md`）；P1.8 收尾（README 补全、gate：`clean` 覆盖 `.runtime/`/`release/`、`duplication`/`doc-sync`/`hygiene` 处置）。
 
 ## 9. 风险汇总
 
