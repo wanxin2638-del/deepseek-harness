@@ -201,12 +201,25 @@ function reasoningInfo(
   }
 }
 
-/** Merge deployment headers while removing case-insensitive attribution collisions. */
-function requestHeaders(headers: Readonly<Record<string, string>> | undefined): Record<string, string> {
+/**
+ * Merge deployment headers with dynamic session identity and attribution.
+ * A dynamic session value replaces a same-named static header because one
+ * fixed value cannot identify multiple conversations.
+ */
+function requestHeaders(
+  headers: Readonly<Record<string, string>> | undefined,
+  sessionHeader?: string,
+  sessionId?: string,
+): Record<string, string> {
   const attribution = attributionHeaders()
   const reserved = new Set(Object.keys(attribution).map(name => name.toLowerCase()))
+  const dynamicName = sessionHeader?.toLowerCase()
   return {
-    ...Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => !reserved.has(name.toLowerCase()))),
+    ...Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => {
+      const lower = name.toLowerCase()
+      return !reserved.has(lower) && lower !== dynamicName
+    })),
+    ...sessionHeader === undefined || sessionId === undefined ? {} : { [sessionHeader]: sessionId },
     ...attribution,
   }
 }
@@ -378,9 +391,13 @@ export class PiAiAdapter extends LlmAdapter {
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
         signal: watchdog.signal,
-        // Profile headers are deployment-owned; attribution names are
-        // Harness-owned and therefore win collisions.
-        headers: requestHeaders(profile.headers),
+        // Profile headers are deployment-owned; dynamic session identity and
+        // attribution names are Harness-owned and therefore win collisions.
+        headers: requestHeaders(
+          profile.headers,
+          profile.sessionHeader,
+          options.sessionId === undefined ? undefined : String(options.sessionId),
+        ),
       })
       const iterator = toStreamChunks(events, model.contextWindow, options.signal)[Symbol.asyncIterator]()
       let exhausted = false

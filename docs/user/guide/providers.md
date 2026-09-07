@@ -46,6 +46,20 @@ The generated [plugin configuration catalog](../../config-catalog.md) lists ever
 The Models page exposes only what a route needs to exist: the API key, display name, base URL, API protocol, and for each model its id, display name, context window, and max output tokens. Every other field — reasoning effort levels, image input, request-compatibility switches, headers, timeouts, retry policy — is set in `$DSH_HOME/settings.yaml`, the same document the page writes. Edit it directly, or, when the browser runs on the same machine as the server, open it with **Open configuration file** in the Settings header; the adapters re-read it on the next request, so nothing needs a restart. The subsections below cover the fields most gateways need.
 :::
 
+### OpenCode Go session header
+
+OpenCode Go requires `x-opencode-session` on model requests. Add `sessionHeader` to its provider profile so the adapter sends the current conversation's session id; do not use a fixed value in `headers`, because concurrent conversations would share one routing id:
+
+```yaml
+llm-pi-ai:
+  providers:
+    opencode-go:
+      apiKeyEnv: OPENCODE_API_KEY
+      sessionHeader: x-opencode-session
+```
+
+The dynamic header remains stable across requests in one conversation and changes for another. The setting applies to model requests; model discovery has no conversation session and does not send it.
+
 ### Image input
 
 A model you enter by hand is treated as text-only until it says otherwise, because nothing can ask an endpoint which modalities it accepts. Attaching an image to such a model is refused before it is sent, naming the model.

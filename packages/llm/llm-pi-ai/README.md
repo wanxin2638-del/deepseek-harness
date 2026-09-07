@@ -54,6 +54,9 @@ Each profile may set a `retryPolicy`; omission uses normal mode with five retrie
         models:
           - id: claude-sonnet-4-5
             contextWindow: 200000
+      opencode-go:
+        apiKeyEnv: OPENCODE_API_KEY
+        sessionHeader: x-opencode-session
       acme-gateway:
         displayName: Acme Gateway
         apiKeyEnv: ACME_GATEWAY_API_KEY
@@ -70,6 +73,8 @@ Each profile may set a `retryPolicy`; omission uses normal mode with five retrie
               high: high
 ```
 
+Set `sessionHeader` when a provider requires a stable per-conversation header. OpenCode Go requires `x-opencode-session`; the adapter fills it from the current `GenerateOptions.sessionId` on each request. A same-named static `headers` entry is replaced when a session id is available, and the dynamic header is omitted for a direct request without one.
+
 | Field | Default | Meaning |
 |---|---|---|
 | `apiKeyEnv` | absent | Credential reference resolved per request; omission defers to pi-ai ambient discovery |
@@ -81,6 +86,7 @@ Each profile may set a `retryPolicy`; omission uses normal mode with five retrie
 | `compat` | catalog detection | Wire-compatibility switches for unrecognized endpoints |
 | `defaultContextWindow` | `262,144` | Capacity fallback for undescribed models |
 | `defaultMaxTokens` | `32,768` | Output-cap fallback for undescribed models |
+| `sessionHeader` | absent | Header that receives the current session id per request |
 | `requestImagePixelBudget` | `4,194,304` | Total-pixel budget for each deterministic request image |
 | `requestImageMaxBytes` | `1 MiB` | Encoded-byte target for each request image before base64 expansion |
 | `maxRequestImageBytes` | `20 MiB` | Aggregate base64 image-payload bound with oldest-first offload |

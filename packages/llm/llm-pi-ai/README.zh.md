@@ -54,6 +54,9 @@ kind: "package-reference"
         models:
           - id: claude-sonnet-4-5
             contextWindow: 200000
+      opencode-go:
+        apiKeyEnv: OPENCODE_API_KEY
+        sessionHeader: x-opencode-session
       acme-gateway:
         displayName: Acme Gateway
         apiKeyEnv: ACME_GATEWAY_API_KEY
@@ -70,6 +73,8 @@ kind: "package-reference"
               high: high
 ```
 
+当提供方需要稳定的逐会话标头时设置 `sessionHeader`。OpenCode Go 要求使用 `x-opencode-session`；适配器会在每次请求中用当前的 `GenerateOptions.sessionId` 填充它。有会话 id 时，同名的静态 `headers` 条目会被替换；没有会话 id 的直接请求则省略动态标头。
+
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `apiKeyEnv` | 无 | 按请求解析的凭据引用；省略时交由 pi-ai 环境发现 |
@@ -81,6 +86,7 @@ kind: "package-reference"
 | `compat` | 目录检测 | 无法识别端点的协议兼容开关 |
 | `defaultContextWindow` | `262,144` | 未描述模型的容量回退 |
 | `defaultMaxTokens` | `32,768` | 未描述模型的输出上限回退 |
+| `sessionHeader` | 无 | 每次请求接收当前会话 id 的标头 |
 | `requestImagePixelBudget` | `4,194,304` | 每张确定性请求图片的总像素预算 |
 | `requestImageMaxBytes` | `1 MiB` | 每张请求图片在 base64 扩展前的编码字节目标 |
 | `maxRequestImageBytes` | `20 MiB` | 带最旧优先卸载的 base64 图片载荷总上限 |

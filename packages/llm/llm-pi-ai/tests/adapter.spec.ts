@@ -123,6 +123,20 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.headers[0]?.['user-agent']).toBe(userAgent())
   })
 
+  it('sends the current session id through the configured dynamic session header', async () => {
+    const server = await mockServer([{ events: textEvents }, { events: textEvents }])
+    const ctx = await harness(server.url, {
+      headers: { 'X-OpenCode-Session': 'static-value' },
+      sessionHeader: 'x-opencode-session',
+    })
+
+    await assemble(ctx, { model: 'deepseek-v4-flash', messages: [], sessionId: 'first-session' as never })
+    await assemble(ctx, { model: 'deepseek-v4-flash', messages: [], sessionId: 'second-session' as never })
+
+    expect(server.headers.map(headers => headers['x-opencode-session']))
+      .toEqual(['first-session', 'second-session'])
+  })
+
   it('forwards common stream options and profile reasoning', async () => {
     const server = await mockServer([{ events: textEvents }])
     const ctx = await harness(server.url, {
@@ -843,6 +857,11 @@ describe('provider profile lifecycle', () => {
   ])('rejects provider header %j when Fetch cannot represent the entry', (name, value) => {
     expect(() => resolveProfiles({ openai: { headers: { [name]: value } } }))
       .toThrow(`provider "openai" header "${name}" is not valid for Fetch`)
+  })
+
+  it.each(['', 'bad header name', 'x\r\nheader'])('rejects invalid dynamic session header %j', (name) => {
+    expect(() => resolveProfiles({ openai: { sessionHeader: name } }))
+      .toThrow(`provider "openai" sessionHeader "${name}" is not valid for Fetch`)
   })
 
   it.each(['maxRetries', 'maxRetryDelayMs'] as const)(
