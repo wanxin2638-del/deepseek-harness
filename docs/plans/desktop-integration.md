@@ -69,30 +69,38 @@ interface DesktopBridge {
 - main 侧校验：title/body 长度上限、拒绝 HTML、sender 必须是 loopback 页面 origin、单通道。
 - C1 的"仅失焦"用 `windowState()`；窗口重新聚焦时 main 自动 `flashClear()`（C2 除外，见决策表）。
 
-## 4. 已证实契约（触发源事实）
+## 4. 已证实契约（触发源事实 · P2.0 复核回填）
 
-**G1 · 会话完成信号已现成** — `packages/api/session-controller/src/client/sessions/manager.ts:886`
-- `syncCompletedNotifications()`：running→idle 边沿且非选中 session → 进 `completedNotifications`（`:895-900`）——就是侧边栏绿色"完成"标记。
-- 列表快照行带 `completed` 字段（`sessions/service.ts:588-589`，`lineage.ts:31`）；标题经 `title` projection 读取（`manager.ts:915`）。
-- `ctx.sessions` 经 `reflect.provide('sessions', …)` 暴露给所有 client 插件（`service.ts:263`）。
-- **C1 直接订阅 sessions 列表 store，看 `completed` false→true 边沿即可，无需重算。**
+> P2.0 逐行复核：全部触发源都可在**现有 client 服务**上观测；不新增 session event、不为非活动会话开事件流。行号以本仓库当前实现为准。
 
-**G2 · 审批目前只有浏览器内提醒** — `packages/client/ui-approval`（bundle patch `cordis.patch.yml:215-216`）
-- 审批请求经 `approval/request` 走 scoped Remote，`ui-approval` 订阅后**接管 composer** 渲染 `ApprovalPanel`（allow-once / reject）。
-- **没有 OS 级通知/闪烁**：窗口未聚焦时审批会被漏掉 → C2 是本计划最高价值增量。
-- 客户端订阅该 Remote 的精确 API 未逐行核实 → P2.0 任务复核。
+**G1 · 会话完成信号已现成** — `packages/api/session-controller/src/client/sessions/manager.ts`
+- `syncCompletedNotifications()`（`:886-908`）：running→idle 边沿且非选中 session → 进 `completedNotifications`（`:895-900`）——就是侧边栏绿色"完成"标记；running 解除（`:897-899`）；移除丢弃（`:902-907`）；首次观测只记录 running 位（`:891-894`），已 idle 的加载帧不产生提醒。
+- 列表快照：`buildListSnapshot()`（`:910-957`）行带 `completed`（经 lineage 展平 `:923` 与 entryCache 比较 `:931-934`）；标题经 'title' projection 读取（`:914-920`）。
+- **订阅面**：`service.ts:191` `readonly list: SnapshotStore<SessionListState>`；`projectList()`（`:577-647`）把 `completed` 写进 store 行（`:589`），`jobsBySession` 同快照（`:645`）；`service.ts:263` `rootCtx.reflect.provide('sessions', this, undefined)` → 任何 client 插件可 `ctx.sessions.list.subscribe()` + `getSnapshot()`（SnapshotStore 语义：`packages/client/store/src/index.ts:26-38,103-136`；list store 为 sync flush，`set` 整值替换）。
+- **C1 直接订阅 sessions 列表 store，看 `completed` false→true 边沿即可，无需重算**；标题用行内 `title`（durable projection，`service.ts:587-596`）。
 
-**G3 · 失败/重试/取消是可观测终态** — `docs/architecture.md` turn flow
-- `assistant/attempt` 是 durable session event（settled failed / retried / cancelled / stream-error）。
-- 客户端经 `SessionEventStream`（`packages/api/session-controller/src/client/transport.ts:136`）订阅当前 session 的事件流。
-- C3 只对**终态失败/取消**提醒（重试中不打扰）；精确过滤规则 P2.0 定。
+**G2 · 审批的观测口是「挂起交互」注册表，不是 approval/request 瀑布** — `packages/client/ui-approval` + `packages/client/ui-session`
+- `PendingApproval`（`ui-approval/src/client/contract/slots.ts:69-160`）：kind 字面量 `'approval'`（`:71,95`）、key `approval:<n>`，`result` 在 answer/delegate/abort 时定局（`:122-150`）；`answerApproval`（`ui-approval/src/client/index.ts:35-68`）在 finally 移除挂起项（`:64-67`）。
+- **观测通道**：`ctx.uiSession.pendingInteractions`（`ui-session/src/client/index.ts:225-231`）——`HostObservable<ReadonlyMap<SessionId, PendingInteraction>>`，全域只读、发布即通知（`:366-386`）；`registerPendingInteraction`（`:304-323`）注册各域。**不注入 `approval/request` 瀑布**（`ui-approval/src/client/index.ts:90-92`）——避免与 ui-approval 应答监听器顺序耦合。
+- **C2 订阅 pendingInteractions，`kind === 'approval'` 项出现 → `flash until-focus`，消失（已处理/放弃/失效）→ 清除。**
 
-**G4 · 后台任务/工作流/子代理**
-- `tool-jobs`（`packages/jobs/tool-jobs`）+ `ui-jobs` 的 `jobsBySession` mirror；workflow、subagent delegation 相关。客户端精确 mirror/订阅 API 未逐行核实 → P2.0 任务复核。
+**G3 · 失败有现成全局转发事件，无需逐会话开流** — `packages/api/session-controller/src`
+- Host 端：`src/index.ts:148-150` `ctx.on('agent/error', ({agent,error}) => ctx.emit('api-session/error', agent.id, errorChain(error)))`——`agent/error` 是终态 Agent 失败（重试是循环内部行为，不触发）；`:171` 后台激活失败同样转发。
+- Client 端：`src/client/index.ts:110-112` `ctx.remote.$on('api-session/error', (sessionId, message) => …)`——纯通知（无 next()），**任何 client 插件可同等订阅**；`api-session/status`（`:104-106`）/`added`（`:102`）/`removed`（`:103`）同族。
+- 持久终态事实：`packages/core/session/src/types.ts:276` `'turn/end': { turn, reason }`，reason 度量（`:192-213`）：`error`（结构化 LlmFailure）/`aborted`/`completed`/`blocked`/`max-tokens`/`interrupted`；`'assistant/attempt'`（`:313`）只给无 surface message 的失败/重试/取消 attempt 落账。
+- **C3 采用 `api-session/error`**：失败通知（标题取列表行 title，正文取 message）；重试不触发。**取消本轮不做全局通知**：host 无取消转发事件（`turn/end aborted` 只在已打开会话的事件窗口可见），列为已知限制与后续扩展点。逐会话事件窗成本：`SessionEventStream`（`transport.ts:136-217`）按 address 开 `session.follow` 并拉历史页，为非活动会话逐个开流成本线性放大，故不采用。
+
+**G4 · 后台任务镜像在列表快照里** — `packages/api/session-controller/src`
+- `SessionJob`（`src/types.ts:527-535`）：`{ id, kind, label, status: 'running'|'stopping'|'completed'|'killed'|'failed', detail?, startedAt, finishedAt? }`；host 以 control 帧 `{type:'jobs', sessionId, jobs}` 推送（`:556`），镜像进列表快照 `jobsBySession`（`manager.ts:954`、`service.ts:84,645`）。
+- **C4 订阅 `ctx.sessions.list`，跟踪 `jobsBySession[sessionId]` 内 job 的 status → 'completed'|'killed'|'failed' 边沿**（`finishedAt` 佐证）；标题=session title、正文=job label；与 `ui-jobs` 展示同源。
 
 **G5 · 配置面**
-- 用户设置走 `dsh-settings-file`（`$DSH_HOME/settings.yaml`，热重载）+ `dsh-api-settings-controller`；P2.4 可新增 `desktop-integration` settings domain 做 UI 开关。
-- 免打扰/开关也可先只做 `Config`（cordis.yml），settings UI 为可选增量。
+- 用户设置：`packages/settings/settings-file`（`$DSH_HOME/settings.yaml`，热重载）+ `packages/api/settings-controller`（web-app patch 行 `cordis.patch.yml:96-97`）；新增 settings domain 需过 settings-controller 注册（P2.4 复核精确 API）。
+- **本轮默认插件 `Config`（cordis.yml）**：web profile 的 assembly patch 是 `packages/bundle/web-app/cordis.patch.yml`，home 层热重载补丁是 `$DSH_HOME/cordis.patch.yml`（Plan 1 F8）——P2.2 的 `dsh.client` 行可落 assembly patch（随包分发）或 home 层；P2.4 为可选 settings UI 增量。
+
+**G6 · locale 与测试面**
+- 通知文案：新插件自带 dictionary（`src/client/locales.ts`，zh 为键源 + en 键一致；模式同 `ui-approval/src/client/locales.ts`），`ctx.locale.register(NS, { zh, en })`；`verify-client-ui-i18n` 强制。
+- 测试：product-user-visible 变更需快照/REAL 覆盖（`docs/testing.md`）；纯 client 插件无浏览器 UI 时按 `packages/AGENTS.md` 需非单元 REAL-composition 测试。通知是 OS 侧副作用、无 keyless 可录制面 → P2.2 用 Loader 起 web profile + 注入 fake bridge，断言「触发源 → 桥调用」序列，以行为断言替代快照。
 
 ## 5. 决策表
 
@@ -120,6 +128,7 @@ interface DesktopBridge {
   5. locale：通知文案所在 dictionary 的现有结构与新增 entry 的流程（`verify-client-ui-i18n`）。
   6. 测试面：`docs/testing.md` 对 product-user-visible 变更的 snapshot 要求；通知类输出是否有可录制的 keyless snapshot 通道（无则记录替代：REAL-composition 断言桥调用序列）。
 - 验收：§4 事实表补全精确 API 与行号；未决项标注探测方法；`git commit`。
+- 结果：事实表已回填（见 §4 G1–G6）；两点结论修正原占位：C2 观测口改为 `uiSession.pendingInteractions`（避免瀑布顺序耦合），C3 改为全局 `api-session/error`（取消通知列为限制）；`git commit` 完成。
 
 ### P2.1 桥契约落地（main + preload）
 - 写路径：`apps/desktop/src/main.ts` 的 IPC 处理、`apps/desktop/src/preload.ts`。
@@ -177,7 +186,7 @@ interface DesktopBridge {
 
 | 任务 | 状态 | 完成日期 | 备注 |
 |---|---|---|---|
-| P2.0 契约调研 | 待执行 | | |
+| P2.0 契约调研 | 已完成 | 2026-09-07 | §4 G1–G6 回填精确 API/行号；C2/C3 观测口结论修正（见 §6 P2.0 结果） |
 | P2.1 桥契约落地 | 待执行 | | |
 | P2.2 client 插件 | 待执行 | | |
 | P2.3 打包集成 | 待执行 | | |
