@@ -222,16 +222,16 @@
 | P1.3 主进程 v1 | 已完成 | 2026-09-06 | dev 源码态后端；就绪解析/登录交换/退出清理已实测 |
 | P1.4 后端装配 | 已完成 | 2026-09-07 | `deploy-root` 闭包清单（228 个 workspace 包）+ `scripts/assemble.mjs`（deploy→restoreLegacyHoists→materializeStagedLinks→摘要→ABI 探针）；`.runtime/` 212.1 MB；D2 已由探针裁决（见 F10） |
 | P1.5 主进程 v2 | 已完成 | 2026-09-07 | `resolveBackendLaunch()` 切装配态（dev `.runtime/`、打包 `resources/dsh-runtime` + `resources/node/node.exe`）；`DSH_HOME = userData/dsh-home` env 注入；dev 实测：就绪行来自 `.runtime` 后端、`dsh-home` 生成、关窗无残留 |
-| P1.6 打包 | 待执行 | | |
-| P1.7 冷启动验证 | 待执行 | | |
-| P1.8 收尾 | 待执行 | | |
+| P1.6 打包 | 已完成 | 2026-09-07 | `electron-builder.yml` + `assemble` 扩展（`.runtime-pack/` 嵌套 payload、`.runtime-node/` node.exe 暂存、探针 home 移出 payload）；`portable.useZip: true` 单步内嵌规避提取竞态；产物 `DeepSeek Harness Desktop 0.1.3-alpha.1.exe` 220.6 MB；依赖/竞态/readiness 修补见 [verification-shell.md §8](notes/verification-shell.md) |
+| P1.7 冷启动验证 | 已完成 | 2026-09-07 | 见 [notes/verification-shell.md](notes/verification-shell.md)；冷启动/生命周期/用户数据/无 key 路径/复用/端口占用/体积逐项取证 |
+| P1.8 收尾 | 已完成 | 2026-09-07 | README 补全（Model Experience + Known Limitations）；`constraints` 注册 `appPackageFiles` 并补 release 元数据；desktop oxlint 清零；README/dedup/md-links/constraints 通过；hygiene 剩 2 项预存失败（built invariants、cordis-config，清树可复现，与本分支改动无关） |
 
 ### 交接记录（2026-09-07 · 换机继续用）
 
 - **已提交**：P1.1–P1.5 全部入库；本分支 `dev`。下一台机器：`git pull` → `pnpm install` → `pnpm run build` + `pnpm run build:web` → `pnpm --filter @deepseek-ai/dsh-desktop assemble` → `pnpm --filter @deepseek-ai/dsh-desktop start`（`.runtime/` 与 `release/` 是本机产物，不入库，需重新 assemble）。
 - **环境事实（本机）**：Node v24.0.0 ABI 137；Electron 44.2.0 内置 Node v24.20.0 ABI 149（D2 因此回退独立 node.exe）；pnpm v11.7.0（`pnpm.cmd`，pwsh 禁脚本）；electron 二进制下载不可达时 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`，必要时代理 127.0.0.1:7897；npm registry 直连可达。
 - **注意事项**：`assemble.mjs` 的 deploy 目标必须传绝对路径（相对路径的 legacy deploy 会在 workspace 包内生成 junk 树——本次已清理 `vendor/schemastery/apps` 残留，勿再触发）；探针旗标经 pnpm 转发形如 `pnpm --filter @deepseek-ai/dsh-desktop run assemble -- --electron-probe`；PowerShell 下 `pnpm.cmd ... 2>&1` 会把 pnpm 的 stderr banner 显示为 NativeCommandError（属误报，判定退出码用 `1> out 2> err; $LASTEXITCODE`）。
-- **待办**：P1.6 electron-builder portable exe（extraResources：`.runtime/` → `resources/dsh-runtime` + node.exe → `resources/node/node.exe`，均解包不进 asar；`npmRebuild: false`；target `portable`，nsis 下载失败降级 `dir`）；P1.7 冷启动验证（`docs/plans/notes/verification-shell.md`）；P1.8 收尾（README 补全、gate：`clean` 覆盖 `.runtime/`/`release/`、`duplication`/`doc-sync`/`hygiene` 处置）。
+- **待办（后续机器）**：本分支 `dev` 已含 P1.1–P1.8 全部实现与验证记录。新机器流程：`git pull` → `pnpm install` → `pnpm run build` + `pnpm run build:web` → `pnpm --filter @deepseek-ai/dsh-desktop assemble` → `start`（`.runtime*` 与 `release/` 是本机产物，不入库，需重新 assemble）；`dist` 前需 `ELECTRON_MIRROR`（npmmirror）与 `ELECTRON_BUILDER_BINARIES_MIRROR`。Plan 2（通知/任务栏）可在本计划产物上加载。
 
 ## 9. 风险汇总
 

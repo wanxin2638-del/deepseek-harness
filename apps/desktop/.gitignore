@@ -1,4 +1,7 @@
 lib/
 .runtime/
+.runtime-node/
+.runtime-pack/
+.runtime-probe-home/
 release/
 *.log

@@ -1,0 +1,36 @@
+appId: ai.deepseek.dsh-desktop
+productName: DeepSeek Harness Desktop
+directories:
+  output: release
+# Only the shell's compiled main and its manifest enter the asar; the backend
+# closure and its node runtime live in extraResources (unpacked, see below).
+files:
+  - lib/**/*
+  - package.json
+  - "!**/*.map"
+asar: true
+npmRebuild: false
+extraResources:
+  # The assembled backend closure (P1.4): require.resolve and native modules
+  # need a real filesystem, so it must never enter the asar. assemble stages it
+  # under .runtime-pack/dsh-runtime because electron-builder drops a root-level
+  # node_modules from extraResources (app-builder-lib filter.js).
+  - from: .runtime-pack
+    to: .
+    filter:
+      - "**/*"
+  # D2: ELECTRON_RUN_AS_NODE is ABI-incompatible with fs-ext (P1.4 probe); the
+  # backend runs under a standalone node.exe staged by assemble into .runtime-node.
+  - from: .runtime-node/node.exe
+    to: node/node.exe
+win:
+  target:
+    - portable
+# Direct File /r embedding instead of the staged Nsis7z extract + CopyFiles
+# path, which intermittently dropped the 85 MB node.exe during first launch.
+portable:
+  useZip: true
+electronLanguages:
+  - en
+  - zh-CN
+compression: normal

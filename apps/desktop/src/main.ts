@@ -26,6 +26,9 @@ const state: DesktopState = {}
 
 let quitting = false
 
+/** Set once the backend printed its ready URL; gates the onExit quit path. */
+let readyUrl: string | null = null
+
 /** The staged closure in dev (.runtime) or packaged (resources/dsh-runtime), hosted by the matching node runtime (D2). */
 function resolveBackendLaunch(portOverride: number | undefined): BackendLaunchSpec {
   const packaged = app.isPackaged
@@ -44,18 +47,21 @@ function startBackendProcess(portOverride: number | undefined): BackendSession {
     env: { ...process.env, DSH_HOME: resolve(app.getPath('userData'), 'dsh-home') },
     onLog: chunk => state.backendLog?.write(chunk),
     onReady: (url) => {
+      readyUrl = url
       const win = BrowserWindow.getAllWindows()[0]
       if (win !== undefined) void win.loadURL(url)
     },
+    // Before readiness the backend.ts reject path surfaces the failure dialog;
+    // this quit path only fires when a ready backend then dies (crash).
     onExit: () => {
-      if (!quitting && BrowserWindow.getAllWindows().length > 0) app.quit()
+      if (!quitting && readyUrl != null && BrowserWindow.getAllWindows().length > 0) app.quit()
     },
   })
   state.session = session
   return session
 }
 
-async function failAndQuit(message: string): Promise<void> {
+function failAndQuit(message: string): void {
   dialog.showErrorBox('DeepSeek Harness Desktop', message)
   app.exit(1)
 }
@@ -71,7 +77,9 @@ function createWindow(): void {
       sandbox: true,
     },
   })
-  win.once('ready-to-show', () => win.show())
+  win.once('ready-to-show', () => {
+    win.show()
+  })
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (isLoopback(url)) return { action: 'allow' }
@@ -118,11 +126,11 @@ if (!gotLock) {
 
     let session: BackendSession
     try {
-      session = await startBackendProcess(portOverride)
+      session = startBackendProcess(portOverride)
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       state.log.write(`[main] backend startup failed: ${reason}\n`)
-      await failAndQuit(reason)
+      failAndQuit(reason)
       return
     }
     try {
@@ -131,7 +139,7 @@ if (!gotLock) {
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       state.log.write(`[main] backend readiness failed: ${reason}\n`)
-      await failAndQuit(reason)
+      failAndQuit(reason)
     }
   })
 
