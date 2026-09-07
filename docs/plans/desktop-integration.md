@@ -187,7 +187,7 @@ interface DesktopBridge {
 | 任务 | 状态 | 完成日期 | 备注 |
 |---|---|---|---|
 | P2.0 契约调研 | 已完成 | 2026-09-07 | §4 G1–G6 回填精确 API/行号；C2/C3 观测口结论修正（见 §6 P2.0 结果） |
-| P2.1 桥契约落地 | 待执行 | | |
+| P2.1 桥契约落地 | 已完成 | 2026-09-07 | 单通道 `dsh:desktop-bridge` + 纯校验/flash 状态机（18 单测）；`lib/preload.cjs` CJS preload（sandbox 限定）；CDP 探针实测：`window.desktopBridge` 五方法齐备、notify=true、flash/flashClear/windowState 全通 |
 | P2.2 client 插件 | 待执行 | | |
 | P2.3 打包集成 | 待执行 | | |
 | P2.4 设置 UI | 待执行 | | 可 defer |

@@ -2,6 +2,8 @@ import { app, BrowserWindow, dialog, shell } from 'electron'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { assembledLaunchSpec, startBackend, systemNodePath, type BackendLaunchSpec, type BackendSession } from './backend.ts'
+import { installDesktopBridge, showNotification, windowStateOf } from './bridge/index.ts'
+import { BRIDGE_CHANNEL } from './bridge/contract.ts'
 import { fileLog, type LogSink } from './log.ts'
 
 const repoRoot = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..')
@@ -75,11 +77,14 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: resolve(fileURLToPath(new URL('.', import.meta.url)), 'preload.cjs'),
     },
   })
   win.once('ready-to-show', () => {
     win.show()
   })
+
+  installWindowBridge(win)
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (isLoopback(url)) return { action: 'allow' }
@@ -90,6 +95,44 @@ function createWindow(): void {
     if (isLoopback(url)) return
     event.preventDefault()
     void shell.openExternal(url)
+  })
+}
+
+/** Install the desktop bridge (Platform 2 primitives) and push window-state transitions to the page. */
+function installWindowBridge(win: BrowserWindow): void {
+  const pushState = () => {
+    if (win.webContents.isDestroyed()) return
+    win.webContents.send(BRIDGE_CHANNEL, { type: 'window-state', state: windowStateOf(win) })
+  }
+  // Explicit per-event bindings: Electron's `on` overloads are keyed by
+  // literal event names, so a union cannot be dispatched through them.
+  win.on('focus', pushState)
+  win.on('blur', pushState)
+  win.on('minimize', pushState)
+  win.on('restore', pushState)
+  win.on('show', pushState)
+  win.on('hide', pushState)
+  const disposeBridge = installDesktopBridge({
+    windowState: () => windowStateOf(win),
+    flashFrame: flag => { win.flashFrame(flag) },
+    notify: input => showNotification(input),
+    send: (channel, payload) => {
+      if (!win.webContents.isDestroyed()) win.webContents.send(channel, payload)
+    },
+    onWindowFocus: listener => {
+      win.on('focus', listener)
+      return () => { win.removeListener('focus', listener) }
+    },
+  })
+  state.log?.write('[main] desktop bridge installed\n')
+  win.on('closed', () => {
+    win.removeListener('focus', pushState)
+    win.removeListener('blur', pushState)
+    win.removeListener('minimize', pushState)
+    win.removeListener('restore', pushState)
+    win.removeListener('show', pushState)
+    win.removeListener('hide', pushState)
+    disposeBridge()
   })
 }
 
@@ -115,6 +158,9 @@ if (!gotLock) {
   })
 
   void app.whenReady().then(async () => {
+    // Windows toast attribution: without an AppUserModelID the notification
+    // center cannot pair toasts to this app (P2.1 risk table).
+    app.setAppUserModelId('com.deepseek-ai.dsh-desktop')
     const logsDir = resolve(app.getPath('userData'), 'logs')
     state.log = fileLog(logsDir, 'main.log')
     state.backendLog = fileLog(logsDir, 'backend.log')

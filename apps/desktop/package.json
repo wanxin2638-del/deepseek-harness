@@ -17,7 +17,7 @@
     "lib/**/*"
   ],
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && node scripts/copy-preload.mjs",
     "start": "electron .",
     "assemble": "node scripts/assemble.mjs",
     "dist": "electron-builder --config electron-builder.yml"
