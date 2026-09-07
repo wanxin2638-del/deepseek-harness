@@ -140,7 +140,7 @@ interface DesktopBridge {
 - 风险：Windows toast 依赖 `app.setAppUserModelId` 与 `Notification.isSupported()` 探测；不支持时 `notify` 返回 false。
 
 ### P2.2 client 插件实现（感知 + 策略）
-- 写路径：`packages/client/desktop-integration/`（新包）或 `apps/desktop/plugins/`（按 P2.0 结论定包归属；推荐独立 workspace 包 + `dsh.client` 行）。
+- 写路径：`packages/client/desktop-integration/`（新包，P2.0 结论：独立 workspace 包）或 `apps/desktop/plugins/`。
 - 要点：
   - 订阅：`ctx.sessions` 列表（C1，`completed` 边沿 + `title` projection）、approval 通道（C2）、`SessionEventStream`（C3，终态失败/取消）、jobs mirror（C4）。
   - 策略：来源开关 / 仅失焦 / `completionMinSeconds` / 去重窗口 / `quietHours`，全部 `Config` 字段。
@@ -148,6 +148,7 @@ interface DesktopBridge {
   - 生命周期：`ctx.effect()` 注册/退订；HMR 安全。
   - 无模型可见输入：不新增 session event。
 - 验收：REAL-composition 测试（Loader 起 web profile + 注入 fake bridge）断言各触发源到桥调用的映射；无桥时零调用；HMR dispose 后订阅移除；`verify-client-ui-i18n` 通过。
+- 结果：`packages/client/desktop-integration`（`@deepseek-ai/dsh-client-desktop-integration`）落地；C1/C2/C3/C4 全部经 client test runtime 的行为测试（16 例）验证，含 no-bridge no-op 与 HMR 订阅移除；`verify-client-ui-i18n` / `verify-client-packages` / `verify-package-dependencies` 通过；随附 Agent Note 记录桥与提醒决策。
 - 风险：approval/jobs 订阅 API 与 P2.0 结论不符 → 回填事实表并调整。
 
 ### P2.3 桌面壳内联（打包集成）
@@ -188,7 +189,7 @@ interface DesktopBridge {
 |---|---|---|---|
 | P2.0 契约调研 | 已完成 | 2026-09-07 | §4 G1–G6 回填精确 API/行号；C2/C3 观测口结论修正（见 §6 P2.0 结果） |
 | P2.1 桥契约落地 | 已完成 | 2026-09-07 | 单通道 `dsh:desktop-bridge` + 纯校验/flash 状态机（18 单测）；`lib/preload.cjs` CJS preload（sandbox 限定）；CDP 探针实测：`window.desktopBridge` 五方法齐备、notify=true、flash/flashClear/windowState 全通 |
-| P2.2 client 插件 | 待执行 | | |
+| P2.2 client 插件 | 已完成 | 2026-09-07 | `packages/client/desktop-integration` + web-app `dsh.client` 行；16 例行为测试 + no-bridge/HMR；i18n/client-packages/deps 门禁过；详见 §6 P2.2 结果与 Agent Note |
 | P2.3 打包集成 | 待执行 | | |
 | P2.4 设置 UI | 待执行 | | 可 defer |
 | P2.5 真机验证 | 待执行 | | |

@@ -274,6 +274,12 @@
     - id: ui-jobs
       name: '@deepseek-ai/dsh-client-ui-jobs'
 
+    # Desktop integration: task-state reminders (completion / approval flash /
+    # failure / jobs) over the shell bridge. The plugin no-ops in a plain
+    # browser, so shipping it in the web profile is a build-time constant.
+    - id: desktop-integration
+      name: '@deepseek-ai/dsh-client-desktop-integration'
+
     # Goal surface: GoalBar in the input dock over the goal session projection.
     - id: ui-goal
       name: '@deepseek-ai/dsh-client-ui-goal'
