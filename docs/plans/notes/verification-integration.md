@@ -1,42 +1,44 @@
-# 桌面集成能力 · 真机验证记录（P2.5）
+# Desktop Integration Capability · Real-Machine Verification Record (P2.5)
 
-> 工作验证文档，不属于 `docs/` 发布树。对应 [桌面集成计划](../desktop-integration.md) P2.5。
-> 约定：无 `DEEPSEEK_API_KEY` 的机器只能验证原语与装配面；模型驱动项按"未验证+原因+操作步骤"记录。
+English | [中文](verification-integration.zh.md)
 
-## 0. 验证环境
+> Working verification document, not part of the `docs/` release tree. Corresponds to [Desktop Integration Plan](../desktop-integration.md) P2.5.
+> Convention: on a machine without `DEEPSEEK_API_KEY`, only the primitives and the assembly surface can be verified; model-driven items are recorded as "unverified + reason + reproduction steps".
 
-- 机器：Windows（dev shell 以 `.runtime` 装配态后端运行，Chrome DevTools 端口 9223）。
-- 版本：`apps/desktop`（P2.1 桥）+ `@deepseek-ai/dsh-client-desktop-integration`（P2.2 行）+ web-app bundle patch（P2.3）。
-- 本机无模型 key：模型驱动项（C1/C2/C3/C4 的真实触发）需要用户配置 key 后按步骤复验。
+## 0. Verification environment
 
-## 1. C1 任务完成提醒
+- Machine: Windows (dev shell runs the assembled backend from `.runtime`, Chrome DevTools port 9223).
+- Versions: `apps/desktop` (P2.1 bridge) + `@deepseek-ai/dsh-client-desktop-integration` (P2.2 row) + web-app bundle patch (P2.3).
+- No model key on this machine: the model-driven items (real triggers of C1/C2/C3/C4) need the user to configure a key, then re-verify by the steps.
 
-- 步骤（需要 key）：窗口最小化 → 在新会话提交一个短任务 → 等待"完成"标记出现 → 预期：toast（文案 locale）+ 4s 任务栏闪烁；回到窗口不打扰。
-- 无 key 证据：完成边沿 → 桥调用的映射由 P2.2 行为测试覆盖（`completed` 边沿通知 + duration 闪烁）；桥的 notify/flash 真机行为在 §5 原语验证中通过。
-- 状态：**未完整验证（缺 key）**；映射与桥已分别验证。
+## 1. C1 task-completion reminder
 
-## 2. C2 审批挂起闪烁
+- Steps (need a key): minimize the window → submit a short task in a new session → wait for the "done" mark → expected: toast (locale copy) + 4s taskbar flash; returning to the window does not re-disturb.
+- No-key evidence: the completed-edge → bridge-call mapping is covered by the P2.2 behavior tests (`completed` edge notification + duration flash); the bridge's real notify/flash behavior passes in the §5 primitive verification.
+- Status: **not fully verified (missing key)**; the mapping and the bridge are verified separately.
 
-- 步骤（需要 key）：触发一个需要审批的工具调用 → 切走窗口 → 预期：任务栏持续闪烁直到回窗口处理；处理（允许/拒绝）后停止。
-- 无 key 证据：pending → until-focus flash、消失 → flashClear，由 P2.2 行为测试覆盖；真实 pending 交互需真实审批请求。
-- 状态：**待 key 复验**。
+## 2. C2 pending-approval flash
 
-## 3. C3 失败提醒
+- Steps (need a key): trigger a tool call that requires approval → switch away from the window → expected: persistent taskbar flash until you return and handle it; stops after handling (allow/deny).
+- No-key evidence: pending → until-focus flash, disappearance → flashClear, covered by the P2.2 behavior tests; a real pending interaction needs a real approval request.
+- Status: **awaiting key re-verification**.
 
-- 步骤（需要 key）：提交一个必然失败的任务（例如调用不存在的工具名）→ 预期：critical toast + 8s 闪烁；重试选择不打扰。
-- 无 key 证据：`api-session/error` → notify(urgency critical) + flash，由 P2.2 行为测试覆盖。
-- 状态：**待 key 复验**。
+## 3. C3 failure reminder
 
-## 4. C4 后台任务完成
+- Steps (need a key): submit a task that is guaranteed to fail (for example, calling a nonexistent tool name) → expected: critical toast + 8s flash; retry does not distribute.
+- No-key evidence: `api-session/error` → notify(urgency critical) + flash, covered by the P2.2 behavior tests.
+- Status: **awaiting key re-verification**.
 
-- 步骤（需要 key）：发送一个 `run_in_background` 的长任务 → 预期：job 转 completed 时 toast + 闪烁。
-- 无 key 证据：`jobsBySession` 状态转移 → notify，由 P2.2 行为测试覆盖（completed/failed/killed 各一）。
-- 状态：**待 key 复验**。
+## 4. C4 background-job completion
 
-## 5. 桥原语真机验证（P2.1 复用）
+- Steps (need a key): send a long `run_in_background` task → expected: toast + flash when the job turns `completed`.
+- No-key evidence: `jobsBySession` state transition → notify, covered by the P2.2 behavior tests (one each for completed/failed/killed).
+- Status: **awaiting key re-verification**.
 
-- 命令：`pnpm --filter @deepseek-ai/dsh-desktop start -- --remote-debugging-port=9223` 后 `node apps/desktop/scripts/probe-bridge.mjs --port 9223`。
-- 结果（2026-09-07 实测）：
+## 5. Bridge-primitive real-machine verification (P2.1 reuse)
+
+- Command: `pnpm --filter @deepseek-ai/dsh-desktop start -- --remote-debugging-port=9223`, then `node apps/desktop/scripts/probe-bridge.mjs --port 9223`.
+- Result (measured 2026-09-07):
 
 ```
 [ok] bridge present: {"present":true,"methods":["flash","flashClear","notify","onWindowState","windowState"]}
@@ -46,27 +48,27 @@
 [ok] flashClear: "ok"
 ```
 
-- 含义：`window.desktopBridge` 五方法齐备；`notify` 走真实 `Notification`（返回 true = toast 已派发）；`flash`/`flashClear` 调用 `win.flashFrame`；窗口状态推送就绪。
-- 非法 payload / 非 loopback sender 拒绝由桥单元测试（`apps/desktop/tests/bridge-ipc.main.spec.ts`）覆盖。
+- Meaning: `window.desktopBridge` has all five methods; `notify` goes through a real `Notification` (true = toast dispatched); `flash`/`flashClear` call `win.flashFrame`; the window-state push is ready.
+- Rejection of invalid payloads / non-loopback senders is covered by the bridge unit tests (`apps/desktop/tests/bridge-ipc.main.spec.ts`).
 
-## 6. 免打扰时段
+## 6. Quiet hours
 
-- 无 key 证据：`quietHours` 命中当前小时时 notify/flash 全跳过（P2.2 行为测试）；C2 审批闪烁同样被抑制。
-- 状态：已验证（行为面）。
+- No-key evidence: when `quietHours` matches the current hour, notify/flash are all skipped (P2.2 behavior tests); the C2 approval flash is suppressed as well.
+- Status: verified (behavior surface).
 
-## 7. 无桥环境（普通浏览器）
+## 7. No-bridge environment (plain browser)
 
-- 预期：同一 web profile 在普通浏览器行为与官方 web 完全一致（插件 no-op，D6）。
-- 证据：插件在 `window.desktopBridge` 缺失时初始化前短路（P2.2 `no bridge` 测试）；web profile 装配含该行但浏览器侧无副作用。
-- 状态：已验证（行为面）。
+- Expected: the same web profile in a plain browser behaves exactly like the official web (plugin no-op, D6).
+- Evidence: the plugin short-circuits before initialization when `window.desktopBridge` is missing (P2.2 `no bridge` test); the web profile assembly carries the row but the browser side has no side effects.
+- Status: verified (behavior surface).
 
-## 8. 文案
+## 8. Copy
 
-- 预期：中英切换后通知标题/正文正确。
-- 证据：P2.2 copy 测试断言 zh/en 输出与键集合一致；`verify-client-ui-i18n` 通过。
-- 状态：已验证（行为面）。
+- Expected: notification title/body are correct after switching between zh and en.
+- Evidence: the P2.2 copy tests assert zh/en output and an identical key set; `verify-client-ui-i18n` passes.
+- Status: verified (behavior surface).
 
-## 9. 装配集成（P2.3）
+## 9. Assembly integration (P2.3)
 
-- `.runtime/node_modules/@deepseek-ai/dsh-client-desktop-integration/lib/client.js` 存在于装配闭包（P2.3 实测待补）。
-- 壳启动日志无行导入错误；页面正常 boot（P2.3 实测待补）。
+- `.runtime/node_modules/@deepseek-ai/dsh-client-desktop-integration/lib/client.js` exists in the assembly closure (P2.3 measurement pending).
+- The shell startup log shows no row import error; the page boots normally (P2.3 measurement pending).
