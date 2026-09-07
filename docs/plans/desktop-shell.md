@@ -3,7 +3,9 @@
 English | [中文](desktop-shell.zh.md)
 
 > Working plan document, not part of the `docs/` release tree: not registered as a doc-sync leaf, not projected into the website.
+
 > Companion to [Plan 2 · Desktop integration capability](desktop-integration.md) (notifications/taskbar flash, etc., which depends on this plan landing).
+
 > This plan only makes "shell = host"; it makes no product logic.
 
 ## 1. Positioning and goals
@@ -28,8 +30,7 @@ Turn the official DSH into a Windows desktop exe. The current product form is `d
 
 All of the following are verified line by line in this repository's source and serve as the only fact source for P1.2–P1.5.
 
-**F1 · Ready line** — `packages/bundle/web-app/src/index.ts:280` prints
-`dsh web: http://127.0.0.1:<port>/?token=<base64url>`
+**F1 · Ready line** — `packages/bundle/web-app/src/index.ts:280` prints `dsh web: http://127.0.0.1:<port>/?token=<base64url>`
 - It prints after the Loader tree settles (`:263-305`), i.e. after sibling rows such as `/api` have mounted; receiving the line means GET/RPC is available.
 - `printUrl: true` is hardcoded in the web bundle patch (`packages/bundle/web-app/cordis.patch.yml:140`).
 - The ` (LAN: <url>)` suffix is appended only when a LAN address exists; LAN appears only with `--host 0.0.0.0`, which is rejected (F3), so there is in practice no LAN suffix. Shell parsing: scan stdout lines, match the `^dsh web: ` prefix and take the first `http://...` token; do not assume it is the first line (boot/telemetry logs may precede it).

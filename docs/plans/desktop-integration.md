@@ -3,7 +3,9 @@
 English | [中文](desktop-integration.zh.md)
 
 > Working plan document, not part of the `docs/` release tree: not registered as a doc-sync leaf, not projected into the website.
+
 > Depends on [Plan 1 · Desktop shell (Electron) engineering](desktop-shell.md): this plan's bridge is provided by the shell's preload, and the plugin's product capability layer sits on top of that bridge.
+
 > This plan follows "**everything is a plugin**": trigger-source sensing, policy, and copy are all plugin/config; the shell provides only the three primitives `notify` / `flash` / window state.
 
 ## 1. Background and goals
@@ -62,11 +64,12 @@ The trigger-source set is extensible: future webhook delivery, schedule, goal mi
 Bridge contract (exposed by the preload via `contextBridge.exposeInMainWorld('desktopBridge', …)`):
 
 ```ts
+type WindowState = 'focused' | 'visible-unfocused' | 'minimized' | 'hidden'
 interface DesktopBridge {
   notify(input: { title: string; body: string; urgency: 'low' | 'normal' | 'critical' }): Promise<boolean>
   flash(mode: { kind: 'until-focus' } | { kind: 'duration'; ms: number }): Promise<void>
   flashClear(): Promise<void>
-  windowState(): Promise<'focused' | 'visible-unfocused' | 'minimized' | 'hidden'>
+  windowState(): Promise<WindowState>
   onWindowState(cb: (s: WindowState) => void): () => void
 }
 ```

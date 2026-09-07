@@ -3,7 +3,9 @@
 English | [中文](verification-shell.zh.md)
 
 > Working plan document, not part of the `docs/` release tree: not registered as a doc-sync leaf, not projected into the website.
+
 > Verification target: `apps/desktop/release/DeepSeek Harness Desktop 0.1.3-alpha.1.exe` (electron-builder portable, `portable.useZip: true`, `resources/dsh-runtime` 213.5 MB + `resources/node/node.exe` 81.3 MB, exe 220.6 MB).
+
 > Machine: Windows 11 (build 26200) x64, no attached display (RDP/headless desktop); measured paths and phenomena recorded as observed.
 
 ## 1. Cold start (recipient perspective)

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/plans/notes/verification-integration.md
-verification-integration.md: ee9d0b5a565820082ed931d205363df1f1650e68
-verification-integration.zh.md: e4d991c418646719899fc0950f74bf977abd2e0d
+verification-integration.md: 8a5e7f2857da265c65716902cf6c7f12d5061e8d
+verification-integration.zh.md: c70812a5ed1433fe41df061361cdb7aa80ee49a7

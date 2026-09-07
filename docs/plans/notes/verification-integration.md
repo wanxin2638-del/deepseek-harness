@@ -3,6 +3,7 @@
 English | [中文](verification-integration.zh.md)
 
 > Working verification document, not part of the `docs/` release tree. Corresponds to [Desktop Integration Plan](../desktop-integration.md) P2.5.
+
 > Convention: on a machine without `DEEPSEEK_API_KEY`, only the primitives and the assembly surface can be verified; model-driven items are recorded as "unverified + reason + reproduction steps".
 
 ## 0. Verification environment

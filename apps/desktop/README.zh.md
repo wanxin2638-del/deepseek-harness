@@ -10,9 +10,9 @@
 
 ```sh
 pnpm run build && pnpm run build:web
-pnpm --filter @deepseek-ai/dsh-desktop assemble   # 暂存 .runtime、.runtime-node、.runtime-pack
-pnpm --filter @deepseek-ai/dsh-desktop start      # 以 .runtime 启动壳（开发）
-pnpm --filter @deepseek-ai/dsh-desktop dist       # 构建 release/ 中的便携 exe
+pnpm --filter @deepseek-ai/dsh-desktop assemble   # stage .runtime, .runtime-node, .runtime-pack
+pnpm --filter @deepseek-ai/dsh-desktop start      # launch the shell in dev (uses .runtime)
+pnpm --filter @deepseek-ai/dsh-desktop dist       # build the portable exe into release/
 ```
 
 便携 exe 完全自包含：它内嵌 Electron 运行时、装配后的后端闭包（`resources/dsh-runtime`）与独立 Node 运行时（`resources/node/node.exe`），因此收件机无需 Node、pnpm、Python 或 git。后端与壳状态存放于 `%APPDATA%\DeepSeek Harness Desktop\dsh-home`（壳注入 `DSH_HOME`；`.env` 无法设置它）。

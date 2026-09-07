@@ -3,7 +3,9 @@
 [English](desktop-shell.md) | 中文
 
 > 工作规划文档，不属于 `docs/` 发布树：不注册 doc-sync leaf、不进 website 投影。
+
 > 配套 [Plan 2 · 桌面集成能力](desktop-integration.zh.md)（通知/任务栏闪烁等，依赖本计划落地）。
+
 > 本计划只做"壳 = 宿主"，不做任何产品逻辑。
 
 ## 1. 定位与目标
@@ -28,8 +30,7 @@
 
 以下均在本仓库源码逐行核实，作为 P1.2–P1.5 的唯一事实来源。
 
-**F1 · 就绪行** — `packages/bundle/web-app/src/index.ts:280` 打印
-`dsh web: http://127.0.0.1:<port>/?token=<base64url>`
+**F1 · 就绪行** — `packages/bundle/web-app/src/index.ts:280` 打印 `dsh web: http://127.0.0.1:<port>/?token=<base64url>`
 - 打印时机在 Loader 树 settle 之后（`:263-305`），即 `/api` 等兄弟行已挂载完，收到该行即可 GET/RPC。
 - `printUrl: true` 在 web bundle patch 写死（`packages/bundle/web-app/cordis.patch.yml:140`）。
 - 行尾仅当有 LAN 地址才追加 ` (LAN: <url>)`；而 LAN 只在 `--host 0.0.0.0` 时出现，该值被拒绝（F3），故实际无 LAN 后缀。壳解析：扫描 stdout 行，匹配 `^dsh web: ` 前缀取首个 `http://...` token；不得假定为第一行（前面可能有 boot/telemetry 日志）。
@@ -84,25 +85,26 @@
 ## 4. 目标架构
 
 ```
-│  main.js（apps/desktop/src/main.ts 编译）                             │
-│  · resolveBackendLaunch()：dev 态 apps/desktop/.runtime/；            │
-│    打包态 process.resourcesPath/dsh-runtime/                          │
-│  · env：{ ...process.env, DSH_HOME: <userData>/dsh-home }（P5 起）     │
-│  · spawn(<node>, [<bin.js>, '--profile', 'web',                      │
-│      '--no-open', '--port', '0'])    ← F3 旗标 + F1 就绪解析          │
-│  · 扫 stdout 匹配 `dsh web: <url>` → loadURL(url)                    │
-│    → 303+Set-Cookie → 干净首页（F2）                                   │
-│  · will-navigate / setWindowOpenHandler：外域走 shell.openExternal    │
-│  · before-quit / 崩溃：kill 后端进程树（taskkill /T）→ 无孤儿          │
-│  · 日志：userData/logs/main.log + backend.log                         │
+│  main.js (compiled from apps/desktop/src/main.ts)                     │
+│  · resolveBackendLaunch(): dev apps/desktop/.runtime/; packaged        │
+│    process.resourcesPath/dsh-runtime/                                  │
+│  · env: { ...process.env, DSH_HOME: <userData>/dsh-home } (P5 onward)  │
+│  · spawn(<node>, [<bin.js>, '--profile', 'web',                       │
+│      '--no-open', '--port', '0'])    ← F3 flags + F1 ready parsing    │
+│  · scan stdout for `dsh web: <url>` → loadURL(url)                    │
+│    → 303+Set-Cookie → clean home (F2)                                  │
+│  · will-navigate / setWindowOpenHandler: off-domain → shell.openExternal│
+│  · before-quit / crash: kill backend process tree (taskkill /T)       │
+│    → no orphans                                                        │
+│  · logs: userData/logs/main.log + backend.log                          │
 └───────────────┬───────────────────────────────────────────────────────┘
-                │ spawn（同一个 electron.exe，ELECTRON_RUN_AS_NODE=1，
-                │   或独立 node.exe —— 见决策 D3）
+                │ spawn (same electron.exe with ELECTRON_RUN_AS_NODE=1,
+                │   or a standalone node.exe — see decision D3)
 ┌───────────────▼───────────────────────────────────────────────────────┐
-│  dsh 后端装配体（pnpm deploy 离线装配，解包在 resources/dsh-runtime，  │
-│  不入 asar）                                                            │
+│  dsh backend assembly (pnpm deploy offline assembly, unpacked at       │
+│  resources/dsh-runtime, not in asar)                                   │
 │  lib/bin.js + node_modules + @deepseek-ai/dsh-web-frontend/dist        │
-│  → 提供 / 与 /api、事件流、静态 UI（F6）                                │
+│  → serves / and /api, the event stream, static UI (F6)                 │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 

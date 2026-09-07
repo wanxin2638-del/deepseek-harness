@@ -3,6 +3,7 @@
 [English](verification-integration.md) | 中文
 
 > 工作验证文档，不属于 `docs/` 发布树。对应 [桌面集成计划](../desktop-integration.zh.md) P2.5。
+
 > 约定：无 `DEEPSEEK_API_KEY` 的机器只能验证原语与装配面；模型驱动项按"未验证+原因+操作步骤"记录。
 
 ## 0. 验证环境

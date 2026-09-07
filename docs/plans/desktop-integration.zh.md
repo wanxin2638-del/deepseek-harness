@@ -3,7 +3,9 @@
 [English](desktop-integration.md) | 中文
 
 > 工作规划文档，不属于 `docs/` 发布树：不注册 doc-sync leaf、不进 website 投影。
+
 > 依赖 [Plan 1 · 桌面壳（Electron）工程](desktop-shell.zh.md) 落地：本计划的桥由壳的 preload 提供，插件的 product 能力层挂在该桥之上。
+
 > 本计划遵循"**一切皆插件**"：触发源的感知、策略、文案全部是插件/配置；壳只提供 `notify` / `flash` / 窗口状态这三个原语。
 
 ## 1. 背景与目标
@@ -36,34 +38,38 @@ Plan 1 落地后，桌面端在功能上等价于"自带浏览器的 dsh web"。
 ## 3. 架构
 
 ```
-┌─ web profile 的 Cordis 树（插件层，产品行为）────────────────────────┐
-│  dsh-desktop-integration/client（dsh.client 行）                      │
-│  · 订阅 ctx.sessions（C1：completed 边沿 + title projection）          │
-│  · 订阅 approval 客户端通道（C2）                                      │
-│  · 订阅 SessionEventStream 的 assistant/attempt（C3）                 │
-│  · 订阅 jobs mirror（C4）                                              │
-│  · 策略：来源开关 / 仅失焦 / 最短运行时长 / 去重窗口 / 免打扰时段      │
-│  · 文案：locale dictionary 经 t()                                       │
-│  · 调 window.desktopBridge（不存在则 no-op）                           │
+┌─ web profile Cordis tree (plugin layer, product behavior) ──────────────┐
+│  dsh-desktop-integration/client (dsh.client row)                        │
+│  · subscribes ctx.sessions (C1: completed edge + title projection)        │
+│  · subscribes the approval client channel (C2)                            │
+│  · subscribes SessionEventStream's assistant/attempt (C3)                 │
+│  · subscribes the jobs mirror (C4)                                        │
+│  · policy: source switches / unfocused-only / min run duration / dedup    │
+│    window / quiet hours                                                   │
+│  · copy: locale dictionary via t()                                        │
+│  · calls window.desktopBridge (no-op when absent)                         │
 └───────────────┬────────────────────────────────────────────────────────┘
-                │ contextBridge（preload，contextIsolation）
+                │ contextBridge (preload, contextIsolation)
 ┌───────────────▼────────────────────────────────────────────────────────┐
-│  Electron main（原语层，无产品语义）                                    │
-│  · dsh:desktop-bridge IPC：payload 校验、sender 白名单（仅 loopback 页）│
-│  · notify({title, body, urgency}) → new Notification()（Windows toast） │
-│  · flash({mode}) / flashClear() → win.flashFrame(true/false)            │
-│  · 窗口状态：focused / visible-unfocused / minimized → 推给插件         │
+│  Electron main (primitive layer, no product semantics)                  │
+│  · dsh:desktop-bridge IPC: payload validation, sender allowlist         │
+│    (loopback page only)                                                 │
+│  · notify({title, body, urgency}) → new Notification() (Windows toast)  │
+│  · flash({mode}) / flashClear() → win.flashFrame(true/false)             │
+│  · window state: focused / visible-unfocused / minimized → pushed to     │
+│    the plugin                                                            │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 桥契约（preload 经 `contextBridge.exposeInMainWorld('desktopBridge', …)` 暴露）：
 
 ```ts
+type WindowState = 'focused' | 'visible-unfocused' | 'minimized' | 'hidden'
 interface DesktopBridge {
   notify(input: { title: string; body: string; urgency: 'low' | 'normal' | 'critical' }): Promise<boolean>
   flash(mode: { kind: 'until-focus' } | { kind: 'duration'; ms: number }): Promise<void>
   flashClear(): Promise<void>
-  windowState(): Promise<'focused' | 'visible-unfocused' | 'minimized' | 'hidden'>
+  windowState(): Promise<WindowState>
   onWindowState(cb: (s: WindowState) => void): () => void
 }
 ```

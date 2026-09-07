@@ -7,7 +7,7 @@ kind: "package-reference"
 
 [English](README.md) | 中文
 
-## 摘要
+## 概述
 
 本包在 Web GUI 运行于 [Windows 桌面壳](../../../apps/desktop/README.zh.md) 内时，把任务状态变化变成桌面提醒：会话完成或后台任务落定时弹 toast 并短闪任务栏、审批挂起时任务栏持续闪烁、回合失败时弹严重级别 toast。它只读现有 client 状态与事件（`ctx.sessions.list`、`ctx.uiSession.pendingInteractions`、全局 `api-session/error` 转发），不发任何 RPC、不加 session event、永不进入模型请求。没有 `window.desktopBridge`（普通浏览器）时所有动作静默 no-op，因此该插件常驻 web profile 是构建期常量。
 
@@ -57,7 +57,7 @@ kind: "package-reference"
 <a id="model-experience"></a>
 ## 模型体验
 
-无。插件只读现有 client 状态与事件、为人类渲染桌面通知，永不进入提示词、消息、schema、流或工具结果。
+无：本包消费现有 client 状态与事件、为人类渲染桌面通知；永不进入提示词、消息、schema、流或工具结果。
 
 #### KV Cache 影响
 

@@ -57,7 +57,7 @@ The plugin holds one effect that subscribes to four existing sources: the sessio
 <a id="model-experience"></a>
 ## Model Experience
 
-None. The plugin reads existing client state and events, renders desktop notifications for a human, and never appears in a prompt, message, schema, stream, or tool result.
+None, as this package consumes existing client state and events and renders desktop notifications for a human; it never appears in a prompt, message, schema, stream, or tool result.
 
 #### KV Cache effect
 

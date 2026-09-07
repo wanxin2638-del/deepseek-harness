@@ -3,7 +3,9 @@
 [English](verification-shell.md) | 中文
 
 > 工作规划文档，不属于 `docs/` 发布树：不注册 doc-sync leaf、不进 website 投影。
+
 > 验证对象：`apps/desktop/release/DeepSeek Harness Desktop 0.1.3-alpha.1.exe`（electron-builder portable，`portable.useZip: true`，`resources/dsh-runtime` 213.5 MB + `resources/node/node.exe` 81.3 MB，exe 220.6 MB）。
+
 > 机器：Windows 11（build 26200）x64，无独立显示器（RDP/headless 桌面），实测路径与现象如实记录。
 
 ## 1. 冷启动（收件人视角）
