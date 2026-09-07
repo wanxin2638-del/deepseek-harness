@@ -19,6 +19,12 @@ import { parseArgs } from 'node:util'
 
 const root = resolve(import.meta.dirname, '..', '..', '..')
 const runtimeDir = resolve(root, 'apps/desktop/.runtime')
+const nodeRuntimeDir = resolve(root, 'apps/desktop/.runtime-node')
+// The packaging payload nests the closure under dsh-runtime/: electron-builder
+// hard-excludes a root-level node_modules from extraResources (filter.js), so
+// the flat development layout can never be packaged as-is.
+const packDir = resolve(root, 'apps/desktop/.runtime-pack')
+const probeHome = resolve(root, 'apps/desktop/.runtime-probe-home')
 const deploySourceNodeModules = resolve(root, 'apps/desktop/deploy-root/node_modules')
 const deployRootManifest = resolve(root, 'apps/desktop/deploy-root/package.json')
 const entryBin = 'node_modules/@deepseek-ai/dsh/lib/bin.js'
@@ -261,7 +267,7 @@ async function probeNode(node, env = {}) {
       cwd: runtimeDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
-      env: { ...process.env, DSH_HOME: resolve(runtimeDir, '.dsh-probe-home'), ...env },
+      env: { ...process.env, DSH_HOME: probeHome, ...env },
     })
     let stdout = ''
     let stderr = ''
@@ -317,6 +323,34 @@ async function verifyHttp401(url) {
   }
 }
 
+/**
+ * Stage the standalone node runtime that hosts the backend in the packaged
+ * payload (D2). The ABI probe just validated `probeNode` against the exact
+ * binary at `process.execPath`, so copying it preserves the validated ABI.
+ */
+async function stageNodeRuntime() {
+  const source = process.execPath
+  await rm(nodeRuntimeDir, { recursive: true, force: true })
+  await mkdir(nodeRuntimeDir, { recursive: true })
+  await cp(source, join(nodeRuntimeDir, 'node.exe'))
+  console.log(`assemble: staged backend node runtime ${source} -> ${join(nodeRuntimeDir, 'node.exe')}`)
+}
+
+/**
+ * Stage the packaging payload: `.runtime/dsh-runtime/` inside `.runtime-pack`.
+ * electron-builder's extraResources filter drops a root-level node_modules, so
+ * the closure rides one level deeper. A hard-linked copy keeps the 213 MB
+ * payload cheap and lets the probe residue (outside `.runtime`) stay out.
+ */
+async function stagePackPayload() {
+  const target = join(packDir, 'dsh-runtime')
+  await rm(packDir, { recursive: true, force: true })
+  await mkdir(packDir, { recursive: true })
+  await cp(runtimeDir, target, { recursive: true, link: true })
+  const size = await sizeOnDisk(packDir)
+  console.log(`assemble: staged packaging payload at ${packDir} (${(size / (1024 * 1024)).toFixed(1)} MB)`)
+}
+
 async function main() {
   const { values } = parseArgs({
     // pnpm forwards a bare `--` before flags; drop those separators.
@@ -335,6 +369,8 @@ async function main() {
   console.log(`  bin: ${bin} (${existsSync(bin) ? 'present' : 'MISSING'})`)
   console.log(`  UI dist: ${frontend} (${existsSync(frontend) ? 'present' : 'MISSING'})`)
   console.log(`  total size: ${(await sizeOnDisk(runtimeDir) / (1024 * 1024)).toFixed(1)} MB`)
+  await stageNodeRuntime()
+  await stagePackPayload()
 
   if (values['skip-probe']) {
     console.log('assemble: skipping ABI probe (--skip-probe)')

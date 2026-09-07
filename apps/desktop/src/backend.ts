@@ -70,7 +70,9 @@ export function startBackend(options: BackendOptions): BackendSession {
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   let buffer = ''
+  let errorBuffer = ''
   let settled = false
+  let disposed = false
 
   const ready = new Promise<string>((resolveReady, reject) => {
     const timer = setTimeout(() => {
@@ -80,8 +82,8 @@ export function startBackend(options: BackendOptions): BackendSession {
       reject(new Error(`backend did not print a ready URL within ${READY_TIMEOUT_MS / 1000}s`))
     }, READY_TIMEOUT_MS)
 
-    child.stdout?.setEncoding('utf8')
-    child.stdout?.on('data', (chunk: string) => {
+    child.stdout.setEncoding('utf8')
+    child.stdout.on('data', (chunk: string) => {
       options.onLog(chunk)
       buffer += chunk
       const lines = buffer.split(/\r?\n/)
@@ -97,21 +99,32 @@ export function startBackend(options: BackendOptions): BackendSession {
         }
       }
     })
-    child.stderr?.setEncoding('utf8')
-    child.stderr?.on('data', (chunk: string) => options.onLog(chunk))
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', (chunk: string) => {
+      options.onLog(chunk)
+      errorBuffer += chunk
+    })
     child.on('error', (error) => {
       if (settled) return
       settled = true
       clearTimeout(timer)
       reject(error)
     })
-  })
-
-  child.on('exit', (code, signal) => {
-    options.onExit(code, signal)
+    child.on('exit', (code, signal) => {
+      options.onExit(code, signal)
+      // An exit before readiness and not caused by dispose is a startup
+      // failure (e.g. the requested --port is taken): surface it to the shell
+      // instead of letting the window vanish silently.
+      if (settled || disposed) return
+      settled = true
+      clearTimeout(timer)
+      const tail = [...buffer.split(/\r?\n/), ...errorBuffer.split(/\r?\n/)].slice(-8).join('\n')
+      reject(new Error(`backend exited with code ${code ?? 'n/a'} before readiness${tail.length > 0 ? `:\n${tail}` : ''}`))
+    })
   })
 
   const dispose = () => {
+    disposed = true
     if (child.exitCode === null && child.signalCode === null) killTree(child)
   }
 
@@ -124,13 +137,13 @@ export function systemNodePath(env: NodeJS.ProcessEnv = process.env): string {
   if (direct !== undefined && direct.length > 0 && direct !== 'node') return direct
   if (process.platform === 'win32') {
     const found = spawnSync('where', ['node'], { stdio: ['ignore', 'pipe', 'ignore'] })
-    if (found.status === 0 && found.stdout) {
+    if (found.status === 0) {
       const first = found.stdout.toString().split(/\r?\n/).find(line => line.trim().length > 0)
       if (first !== undefined) return first.trim()
     }
   } else {
     const found = spawnSync('which', ['node'], { stdio: ['ignore', 'pipe', 'ignore'] })
-    if (found.status === 0 && found.stdout) {
+    if (found.status === 0) {
       const resolved = found.stdout.toString().trim()
       if (resolved.length > 0) return resolved
     }

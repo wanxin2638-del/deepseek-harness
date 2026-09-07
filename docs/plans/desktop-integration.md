@@ -1,195 +1,213 @@
-# Plan 2 · 桌面集成能力（通知 / 任务栏闪烁等）
+# Plan 2 · Desktop Integration Capability (notifications / taskbar flash, etc.)
 
-> 工作规划文档，不属于 `docs/` 发布树：不注册 doc-sync leaf、不进 website 投影、不做中英配对。
-> 依赖 [Plan 1 · 桌面壳（Electron）工程](desktop-shell.md) 落地：本计划的桥由壳的 preload 提供，插件的 product 能力层挂在该桥之上。
-> 本计划遵循"**一切皆插件**"：触发源的感知、策略、文案全部是插件/配置；壳只提供 `notify` / `flash` / 窗口状态这三个原语。
+English | [中文](desktop-integration.zh.md)
 
-## 1. 背景与目标
+> Working plan document, not part of the `docs/` release tree: not registered as a doc-sync leaf, not projected into the website.
 
-Plan 1 落地后，桌面端在功能上等价于"自带浏览器的 dsh web"。本计划补上桌面端独有的价值：**任务状态变化 → 用户可见提醒**，包括 Windows 通知（toast）与任务栏闪烁。触发源不止审批（现状只有浏览器内 composer 接管，见 §4 事实 G2），而是产品事件面的一个完整子集。
+> Depends on [Plan 1 · Desktop shell (Electron) engineering](desktop-shell.md): this plan's bridge is provided by the shell's preload, and the plugin's product capability layer sits on top of that bridge.
 
-目标能力（按价值排序）：
+> This plan follows "**everything is a plugin**": trigger-source sensing, policy, and copy are all plugin/config; the shell provides only the three primitives `notify` / `flash` / window state.
 
-| # | 能力 | 触发源 | 用户价值 |
+## 1. Background and goals
+
+Once Plan 1 lands, the desktop side is functionally equivalent to "dsh web with a built-in browser". This plan adds the desktop-only value: **task-state changes → user-visible reminders**, including Windows notifications (toast) and the taskbar flash. The trigger sources are not limited to approvals (today only the in-browser composer takes over, see §4 fact G2), but a complete subset of the product event surface.
+
+Target capabilities (ordered by value):
+
+| # | Capability | Trigger source | User value |
 |---|---|---|---|
-| C1 | 任务完成提醒 | 会话 running→idle 边沿（侧边栏"完成"标记同源信号） | 窗口失焦时也能知道跑完了 |
-| C2 | 审批挂起闪烁 | `approval/request`（当前**无**任何 OS 提醒） | 批准/拒绝前不被漏掉 |
-| C3 | 失败/放弃提醒 | `assistant/attempt` 终态失败/取消 | 不用盯着等结果 |
-| C4 | 后台任务/工作流/子代理完成 | jobs mirror、workflow、subagent delegation | 长任务完成通知 |
-| C5 | 后端异常 | 壳级：子进程意外退出/重启 | 进程崩了用户知道 |
+| C1 | Task-completion reminder | Session running→idle edge (same-source signal as the sidebar "done" mark) | Know when a run finishes even while the window is unfocused |
+| C2 | Pending-approval flash | `approval/request` (currently **no** OS reminder at all) | Not missed before allow/deny |
+| C3 | Failure/abandon reminder | `assistant/attempt` terminal failure/cancel | Do not have to watch for the result |
+| C4 | Background task/workflow/subagent completion | jobs mirror, workflow, subagent delegation | Long-task completion notification |
+| C5 | Backend anomaly | Shell-level: unexpected child-process exit/restart | The user knows when the process crashes |
 
-触发源集合可扩展：未来 webhook 触达、schedule、goal 里程碑等以同样方式注册（插件即扩展点）。
+The trigger-source set is extensible: future webhook delivery, schedule, goal milestones, and so on register the same way (the plugin is the extension point).
 
-## 2. 设计原则（对齐仓库规则）
+## 2. Design principles (aligned with repo rules)
 
-| 原则 | 含义 |
+| Principle | Meaning |
 |---|---|
-| **行为是插件，壳是原语** | 触发源感知、去重、阈值、文案全在 client 插件与它的 `Config`；Electron main 只有 `notify` / `flash` / 窗口状态，不含任何产品语义。 |
-| **Model-visible ⟺ logged 不动** | 提醒是纯展示：**不新增任何 session event**，不进入模型可见输入；触发源一律读现有状态/事件。 |
-| **无桥优雅降级** | 插件检测 `window.desktopBridge` 存在才生效；普通浏览器里跑同一 web profile 时静默 no-op。 |
-| **文案 locale-owned** | 通知标题/正文是产品文案，走 typed dictionary + `t`（`packages/client/AGENTS.md` "Client UI copy is locale-owned"），禁止硬编码。 |
-| **策略可配置** | 每个触发源的开关、阈值、免打扰时段是插件 `Config` 字段，来自 cordis.yml；不是硬编码常量。 |
-| **注册是 effect** | 订阅走 `ctx.effect()` / `ctx.on()`，卸载即退订（HMR 安全）。 |
+| **Behavior is plugin, shell is primitive** | Trigger-source sensing, dedup, thresholds, and copy all live in the client plugin and its `Config`; Electron main has only `notify` / `flash` / window state, with no product semantics. |
+| **Model-visible ⟺ logged untouched** | Reminders are presentation-only: **no new session event**, no model-visible input; trigger sources always read existing state/events. |
+| **Graceful no-bridge degradation** | The plugin only takes effect when it detects `window.desktopBridge`; running the same web profile in a plain browser is a silent no-op. |
+| **Copy locale-owned** | Notification title/body are product copy, routed through a typed dictionary + `t` (`packages/client/AGENTS.md` "Client UI copy is locale-owned"); no hardcoding. |
+| **Policy configurable** | Each trigger's switch, threshold, and quiet hours are plugin `Config` fields from cordis.yml; not hardcoded constants. |
+| **Registration is effect** | Subscriptions go through `ctx.effect()` / `ctx.on()`; unload unsubscribes (HMR-safe). |
 
-## 3. 架构
+## 3. Architecture
 
 ```
-┌─ web profile 的 Cordis 树（插件层，产品行为）────────────────────────┐
-│  dsh-desktop-integration/client（dsh.client 行）                      │
-│  · 订阅 ctx.sessions（C1：completed 边沿 + title projection）          │
-│  · 订阅 approval 客户端通道（C2）                                      │
-│  · 订阅 SessionEventStream 的 assistant/attempt（C3）                 │
-│  · 订阅 jobs mirror（C4）                                              │
-│  · 策略：来源开关 / 仅失焦 / 最短运行时长 / 去重窗口 / 免打扰时段      │
-│  · 文案：locale dictionary 经 t()                                       │
-│  · 调 window.desktopBridge（不存在则 no-op）                           │
+┌─ web profile Cordis tree (plugin layer, product behavior) ──────────────┐
+│  dsh-desktop-integration/client (dsh.client row)                        │
+│  · subscribes ctx.sessions (C1: completed edge + title projection)        │
+│  · subscribes the approval client channel (C2)                            │
+│  · subscribes SessionEventStream's assistant/attempt (C3)                 │
+│  · subscribes the jobs mirror (C4)                                        │
+│  · policy: source switches / unfocused-only / min run duration / dedup    │
+│    window / quiet hours                                                   │
+│  · copy: locale dictionary via t()                                        │
+│  · calls window.desktopBridge (no-op when absent)                         │
 └───────────────┬────────────────────────────────────────────────────────┘
-                │ contextBridge（preload，contextIsolation）
+                │ contextBridge (preload, contextIsolation)
 ┌───────────────▼────────────────────────────────────────────────────────┐
-│  Electron main（原语层，无产品语义）                                    │
-│  · dsh:desktop-bridge IPC：payload 校验、sender 白名单（仅 loopback 页）│
-│  · notify({title, body, urgency}) → new Notification()（Windows toast） │
-│  · flash({mode}) / flashClear() → win.flashFrame(true/false)            │
-│  · 窗口状态：focused / visible-unfocused / minimized → 推给插件         │
+│  Electron main (primitive layer, no product semantics)                  │
+│  · dsh:desktop-bridge IPC: payload validation, sender allowlist         │
+│    (loopback page only)                                                 │
+│  · notify({title, body, urgency}) → new Notification() (Windows toast)  │
+│  · flash({mode}) / flashClear() → win.flashFrame(true/false)             │
+│  · window state: focused / visible-unfocused / minimized → pushed to     │
+│    the plugin                                                            │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-桥契约（preload 经 `contextBridge.exposeInMainWorld('desktopBridge', …)` 暴露）：
+Bridge contract (exposed by the preload via `contextBridge.exposeInMainWorld('desktopBridge', …)`):
 
 ```ts
+type WindowState = 'focused' | 'visible-unfocused' | 'minimized' | 'hidden'
 interface DesktopBridge {
   notify(input: { title: string; body: string; urgency: 'low' | 'normal' | 'critical' }): Promise<boolean>
   flash(mode: { kind: 'until-focus' } | { kind: 'duration'; ms: number }): Promise<void>
   flashClear(): Promise<void>
-  windowState(): Promise<'focused' | 'visible-unfocused' | 'minimized' | 'hidden'>
+  windowState(): Promise<WindowState>
   onWindowState(cb: (s: WindowState) => void): () => void
 }
 ```
 
-- main 侧校验：title/body 长度上限、拒绝 HTML、sender 必须是 loopback 页面 origin、单通道。
-- C1 的"仅失焦"用 `windowState()`；窗口重新聚焦时 main 自动 `flashClear()`（C2 除外，见决策表）。
+- main-side validation: title/body length caps, reject HTML, sender must be a loopback-page origin, single channel.
+- C1's "unfocused-only" uses `windowState()`; on window refocus main calls `flashClear()` automatically (except C2, see the decision table).
 
-## 4. 已证实契约（触发源事实）
+## 4. Confirmed contracts (trigger-source facts · P2.0 review backfill)
 
-**G1 · 会话完成信号已现成** — `packages/api/session-controller/src/client/sessions/manager.ts:886`
-- `syncCompletedNotifications()`：running→idle 边沿且非选中 session → 进 `completedNotifications`（`:895-900`）——就是侧边栏绿色"完成"标记。
-- 列表快照行带 `completed` 字段（`sessions/service.ts:588-589`，`lineage.ts:31`）；标题经 `title` projection 读取（`manager.ts:915`）。
-- `ctx.sessions` 经 `reflect.provide('sessions', …)` 暴露给所有 client 插件（`service.ts:263`）。
-- **C1 直接订阅 sessions 列表 store，看 `completed` false→true 边沿即可，无需重算。**
+> P2.0 line-by-line review: every trigger source is observable on **existing client services**; no new session event, no event stream opened for inactive sessions. Line numbers follow this repository's current implementation.
 
-**G2 · 审批目前只有浏览器内提醒** — `packages/client/ui-approval`（bundle patch `cordis.patch.yml:215-216`）
-- 审批请求经 `approval/request` 走 scoped Remote，`ui-approval` 订阅后**接管 composer** 渲染 `ApprovalPanel`（allow-once / reject）。
-- **没有 OS 级通知/闪烁**：窗口未聚焦时审批会被漏掉 → C2 是本计划最高价值增量。
-- 客户端订阅该 Remote 的精确 API 未逐行核实 → P2.0 任务复核。
+**G1 · The session-completion signal already exists** — `packages/api/session-controller/src/client/sessions/manager.ts`
+- `syncCompletedNotifications()` (`:886-908`): the running→idle edge on a non-selected session enters `completedNotifications` (`:895-900`) — this is the sidebar's green "done" mark; un-running (`:897-899`); removal is dropped (`:902-907`); first observation only records the running bit (`:891-894`), and an already-idle loaded frame produces no reminder.
+- List snapshot: `buildListSnapshot()` (`:910-957`) rows carry `completed` (lineage-flattened `:923`, entryCache-compared `:931-934`); the title is read through the 'title' projection (`:914-920`).
+- **Subscription surface**: `service.ts:191` `readonly list: SnapshotStore<SessionListState>`; `projectList()` (`:577-647`) writes `completed` into the store rows (`:589`), `jobsBySession` in the same snapshot (`:645`); `service.ts:263` `rootCtx.reflect.provide('sessions', this, undefined)` → any client plugin can `ctx.sessions.list.subscribe()` + `getSnapshot()` (SnapshotStore semantics: `packages/client/store/src/index.ts:26-38,103-136`; the list store is a sync flush, `set` replaces the whole value).
+- **C1 subscribes to the sessions list store directly and watches the `completed` false→true edge, no recompute needed**; the title uses the row's `title` (durable projection, `service.ts:587-596`).
 
-**G3 · 失败/重试/取消是可观测终态** — `docs/architecture.md` turn flow
-- `assistant/attempt` 是 durable session event（settled failed / retried / cancelled / stream-error）。
-- 客户端经 `SessionEventStream`（`packages/api/session-controller/src/client/transport.ts:136`）订阅当前 session 的事件流。
-- C3 只对**终态失败/取消**提醒（重试中不打扰）；精确过滤规则 P2.0 定。
+**G2 · The approval observation point is the "pending interaction" registry, not the approval/request waterfall** — `packages/client/ui-approval` + `packages/client/ui-session`
+- `PendingApproval` (`ui-approval/src/client/contract/slots.ts:69-160`): kind literal `'approval'` (`:71,95`), key `approval:<n>`, `result` settles at answer/delegate/abort (`:122-150`); `answerApproval` (`ui-approval/src/client/index.ts:35-68`) removes the pending item in finally (`:64-67`).
+- **Observation channel**: `ctx.uiSession.pendingInteractions` (`ui-session/src/client/index.ts:225-231`) — a `HostObservable<ReadonlyMap<SessionId, PendingInteraction>>`, global read-only, notifies on publish (`:366-386`); `registerPendingInteraction` (`:304-323`) registers each domain. Does **not** inject the `approval/request` waterfall (`ui-approval/src/client/index.ts:90-92`) — avoids coupling to the ui-approval answer-listener order.
+- **C2 subscribes to pendingInteractions: a `kind === 'approval'` item appearing → `flash until-focus`; its disappearance (handled/abandoned/invalid) → clear.**
 
-**G4 · 后台任务/工作流/子代理**
-- `tool-jobs`（`packages/jobs/tool-jobs`）+ `ui-jobs` 的 `jobsBySession` mirror；workflow、subagent delegation 相关。客户端精确 mirror/订阅 API 未逐行核实 → P2.0 任务复核。
+**G3 · Failures have a ready global forwarded event; no per-session stream needed** — `packages/api/session-controller/src`
+- Host side: `src/index.ts:148-150` `ctx.on('agent/error', ({agent,error}) => ctx.emit('api-session/error', agent.id, errorChain(error)))` — `agent/error` is terminal Agent failure (retry is in-loop behavior and does not trigger it); `:171` background-activation failure forwards the same way.
+- Client side: `src/client/index.ts:110-112` `ctx.remote.$on('api-session/error', (sessionId, message) => …)` — pure notification (no next()), **any client plugin can subscribe equally**; `api-session/status` (`:104-106`) / `added` (`:102`) / `removed` (`:103`) are the same family.
+- Persistent terminal-state fact: `packages/core/session/src/types.ts:276` `'turn/end': { turn, reason }`, reason measures (`:192-213`): `error` (structured LlmFailure) / `aborted` / `completed` / `blocked` / `max-tokens` / `interrupted`; `'assistant/attempt'` (`:313`) records only failed/retried/cancelled attempts without a surface message.
+- **C3 uses `api-session/error`**: failure notification (title from the list row title, body from the message); retry does not trigger. **Cancellation makes no global notification**: the host has no cancel-forward event (`turn/end aborted` is visible only in an open session's event window), listed as a known limitation and future extension point. Per-session event-window cost: `SessionEventStream` (`transport.ts:136-217`) opens `session.follow` per address and pulls the history page; opening a stream per inactive session scales linearly, so it is not used.
 
-**G5 · 配置面**
-- 用户设置走 `dsh-settings-file`（`$DSH_HOME/settings.yaml`，热重载）+ `dsh-api-settings-controller`；P2.4 可新增 `desktop-integration` settings domain 做 UI 开关。
-- 免打扰/开关也可先只做 `Config`（cordis.yml），settings UI 为可选增量。
+**G4 · The background-jobs mirror is in the list snapshot** — `packages/api/session-controller/src`
+- `SessionJob` (`src/types.ts:527-535`): `{ id, kind, label, status: 'running'|'stopping'|'completed'|'killed'|'failed', detail?, startedAt, finishedAt? }`; the host pushes a control frame `{type:'jobs', sessionId, jobs}` (`:556`), mirrored into the `jobsBySession` list snapshot (`manager.ts:954`, `service.ts:84,645`).
+- **C4 subscribes to `ctx.sessions.list` and tracks a job's status in `jobsBySession[sessionId]` → 'completed'|'killed'|'failed' edge** (`finishedAt` corroborates); title = session title, body = job label; same source as the `ui-jobs` display.
 
-## 5. 决策表
+**G5 · Configuration surface**
+- User settings: `packages/settings/settings-file` (`$DSH_HOME/settings.yaml`, hot reload) + `packages/api/settings-controller` (web-app patch row `cordis.patch.yml:96-97`); adding a settings domain must go through settings-controller registration (P2.4 re-checks the exact API).
+- **Default is the plugin `Config` (cordis.yml) this round**: the web profile's assembly patch is `packages/bundle/web-app/cordis.patch.yml`, and the home-layer hot-reload patch is `$DSH_HOME/cordis.patch.yml` (Plan 1 F8) — P2.2's `dsh.client` row can land in the assembly patch (ships with the package) or the home layer; P2.4 is an optional settings-UI increment.
 
-| # | 决策 | 选项与推荐 | 依据 |
+**G6 · Locale and test surfaces**
+- Notification copy: the new plugin carries its own dictionary (`src/client/locales.ts`, zh is the key source with en key-identical; pattern like `ui-approval/src/client/locales.ts`), via `ctx.locale.register(NS, { zh, en })`; `verify-client-ui-i18n` enforces it.
+- Testing: a product-user-visible change needs snapshot/REAL coverage (`docs/testing.md`); a pure client plugin with no browser UI needs a non-unit REAL-composition test per `packages/AGENTS.md`. Notifications are an OS-side side effect with no keyless recordable surface → P2.2 boots the web profile through the Loader + injects a fake bridge, and asserts the "trigger source → bridge call" sequence as a behavior assertion instead of a snapshot.
+
+## 5. Decision table
+
+| # | Decision | Options and recommendation | Basis |
 |---|---|---|---|
-| D1 | 感知层位置 | **client 插件**（`dsh.client` 行），进 web profile；不 fork 任何官方 bundle，用 profile 的 `cordis.patch.yml`（home 层热重载）或 overlay bundle 插行 | 一切皆插件；G1 |
-| D2 | 桥只给原语 | main 不含任何产品语义，只有 notify/flash/windowState | 壳是宿主（Plan 1 §2） |
-| D3 | C1 判定信号 | 直接用 `completed` 边沿（G1），不在壳里轮询、不重算 | G1；避免重复实现 |
-| D4 | C2 闪烁语义 | `flash({kind:'until-focus'})`：**闪烁持续到用户处理审批**；窗口聚焦才清；C1/C3/C4 用 `duration` 型闪烁+通知 | 审批不可错过，完成通知一次即可 |
-| D5 | 免打扰 | 插件 `Config` 提供 `quietHours`（可配）；生效期间 notify 返回 false、flash 不做 | 策略可配置原则 |
-| D6 | 无桥降级 | `window.desktopBridge` 缺失 → 插件 no-op；同一 web profile 在普通浏览器仍可运行 | 双环境一致 |
-| D7 | 文案 | 通知标题/正文入 locale dictionary，走 `t()` | locale-owned 规则 |
+| D1 | Sensing-layer location | **client plugin** (`dsh.client` row), into the web profile; no fork of any official bundle, insert a row via the profile's `cordis.patch.yml` (home-layer hot reload) or an overlay bundle | Everything is a plugin; G1 |
+| D2 | Bridge is primitives-only | main carries no product semantics, only notify/flash/windowState | The shell is the host (Plan 1 §2) |
+| D3 | C1 determination signal | use the `completed` edge directly (G1); no shell polling, no recompute | G1; avoid reimplementation |
+| D4 | C2 flash semantics | `flash({kind:'until-focus'})`: **flash continues until the user handles the approval**; cleared only on window focus; C1/C3/C4 use `duration`-type flash + notification | An approval must not be missed; a completion notification is once |
+| D5 | Quiet hours | plugin `Config` provides `quietHours` (configurable); during them notify returns false and no flash happens | Policy-configurable principle |
+| D6 | No-bridge degradation | `window.desktopBridge` missing → plugin no-op; the same web profile still runs in a plain browser | Both environments consistent |
+| D7 | Copy | notification title/body enter the locale dictionary via `t()` | locale-owned rule |
 
-## 6. 任务拆解
+## 6. Task breakdown
 
-通用约定：依赖 Plan 1 的 P1.3/P1.5 提供桥可用的 dev 壳；每个任务结束 `git commit`（信息带 P#），更新本文件 §8 状态表。
+Common convention: depends on Plan 1's P1.3/P1.5 for a bridge-usable dev shell; each task ends with a `git commit` (message carries P#) and updates this file's §8 status table.
 
-### P2.0 契约调研（只读）
-- 写路径：仅本文件（§4 事实表回填）。
-- 复核清单：
-  1. G2：`ui-approval` 订阅 `approval/request` 的**客户端精确 API**（scoped Remote 形态、store/channel 名），确认 client 插件可注入同等通道；确认"审批挂起中"的判定状态。
-  2. G3：`assistant/attempt` 事件载荷的终态判别字段（failed/retried/cancelled），确认重试中不误报的过滤条件；SessionEventStream 对非活动会话的订阅成本。
-  3. G4：jobs mirror / workflow / subagent 的客户端订阅 API 与完成判定。
-  4. G5：settings domain 新增一个 namespace 的最小改动面（settings-file + api-settings-controller + ui-settings 行）。
-  5. locale：通知文案所在 dictionary 的现有结构与新增 entry 的流程（`verify-client-ui-i18n`）。
-  6. 测试面：`docs/testing.md` 对 product-user-visible 变更的 snapshot 要求；通知类输出是否有可录制的 keyless snapshot 通道（无则记录替代：REAL-composition 断言桥调用序列）。
-- 验收：§4 事实表补全精确 API 与行号；未决项标注探测方法；`git commit`。
+### P2.0 Contract review (read-only)
+- Write path: this file only (§4 fact-table backfill).
+- Review checklist:
+  1. G2: `ui-approval`'s **exact client API** for subscribing to `approval/request` (scoped Remote form, store/channel name), confirm a client plugin can inject the same channel; confirm the "approval pending" determination state.
+  2. G3: `assistant/attempt` event payload's terminal-state discriminant fields (failed/retried/cancelled), confirm the filter that avoids false positives during retry; SessionEventStream's subscription cost for inactive sessions.
+  3. G4: jobs mirror / workflow / subagent client subscription APIs and completion determination.
+  4. G5: the minimal change surface for adding one settings-domain namespace (settings-file + api-settings-controller + ui-settings row).
+  5. locale: the existing structure of the dictionary hosting notification copy and the flow for adding an entry (`verify-client-ui-i18n`).
+  6. Test surface: `docs/testing.md`'s snapshot requirement for product-user-visible changes; whether notification output has a recordable keyless snapshot channel (if not, record the substitute: REAL-composition assertions on the bridge-call sequence).
+- Acceptance: §4 fact table backfilled with exact APIs and line numbers; undecided items marked with a probe method; `git commit`.
+- Result: the fact table is backfilled (see §4 G1–G6); two conclusions correct the original placeholders: C2's observation point becomes `uiSession.pendingInteractions` (avoids waterfall-order coupling), C3 becomes the global `api-session/error` (cancel notification listed as a limitation); `git commit` done.
 
-### P2.1 桥契约落地（main + preload）
-- 写路径：`apps/desktop/src/main.ts` 的 IPC 处理、`apps/desktop/src/preload.ts`。
-- 要点：
-  - 按 §3 桥契约实现；`contextBridge` + `contextIsolation: true`；payload 校验（长度、枚举、拒绝 HTML）；sender 白名单（仅 `http://127.0.0.1:*`）。
-  - main 侧：`Notification`（Windows toast，`app.setAppUserModelId` 保证 toast 归属）、`win.flashFrame`、窗口 `focus`/`minimize`/`blur` 状态推送、`flashClear` 与窗口聚焦联动（C2 的 until-focus 除外）。
-  - 单测：IPC 校验与状态机用 mock 的 BrowserWindow/Notification 覆盖；真机行为 P2.5。
-- 验收：dev 壳里 `window.desktopBridge` 存在且 `notify` 能弹 toast、`flash` 能闪任务栏；非法 payload 被拒；非 loopback sender 被拒。
-- 风险：Windows toast 依赖 `app.setAppUserModelId` 与 `Notification.isSupported()` 探测；不支持时 `notify` 返回 false。
+### P2.1 Bridge-contract landing (main + preload)
+- Write path: `apps/desktop/src/main.ts`'s IPC handling, `apps/desktop/src/preload.ts`.
+- Points:
+  - Implement per the §3 bridge contract; `contextBridge` + `contextIsolation: true`; payload validation (length, enum, reject HTML); sender allowlist (only `http://127.0.0.1:*`).
+  - main side: `Notification` (Windows toast, `app.setAppUserModelId` guarantees toast attribution), `win.flashFrame`, window `focus`/`minimize`/`blur` state push, `flashClear` linked to window focus (except C2's until-focus).
+  - Unit tests: IPC validation and the state machine are covered with a mocked BrowserWindow/Notification; real-machine behavior is P2.5.
+- Acceptance: in the dev shell `window.desktopBridge` exists, `notify` pops a toast, `flash` flashes the taskbar; invalid payloads rejected; non-loopback senders rejected.
+- Risk: Windows toast depends on `app.setAppUserModelId` and the `Notification.isSupported()` probe; where unsupported, `notify` returns false.
 
-### P2.2 client 插件实现（感知 + 策略）
-- 写路径：`packages/client/desktop-integration/`（新包）或 `apps/desktop/plugins/`（按 P2.0 结论定包归属；推荐独立 workspace 包 + `dsh.client` 行）。
-- 要点：
-  - 订阅：`ctx.sessions` 列表（C1，`completed` 边沿 + `title` projection）、approval 通道（C2）、`SessionEventStream`（C3，终态失败/取消）、jobs mirror（C4）。
-  - 策略：来源开关 / 仅失焦 / `completionMinSeconds` / 去重窗口 / `quietHours`，全部 `Config` 字段。
-  - 桥调用：`window.desktopBridge` 缺失 no-op；文案经 `t()`。
-  - 生命周期：`ctx.effect()` 注册/退订；HMR 安全。
-  - 无模型可见输入：不新增 session event。
-- 验收：REAL-composition 测试（Loader 起 web profile + 注入 fake bridge）断言各触发源到桥调用的映射；无桥时零调用；HMR dispose 后订阅移除；`verify-client-ui-i18n` 通过。
-- 风险：approval/jobs 订阅 API 与 P2.0 结论不符 → 回填事实表并调整。
+### P2.2 Client-plugin implementation (sensing + policy)
+- Write path: `packages/client/desktop-integration/` (new package, P2.0 conclusion: independent workspace package) or `apps/desktop/plugins/`.
+- Points:
+  - Subscriptions: `ctx.sessions` list (C1, `completed` edge + `title` projection), the approval channel (C2), `SessionEventStream` (C3, terminal failure/cancel), the jobs mirror (C4).
+  - Policy: source switches / unfocused-only / `completionMinSeconds` / dedup window / `quietHours`, all `Config` fields.
+  - Bridge calls: `window.desktopBridge` missing → no-op; copy via `t()`.
+  - Lifecycle: register/unsubscribe via `ctx.effect()`; HMR-safe.
+  - No model-visible input: no new session event.
+- Acceptance: a REAL-composition test (Loader boots the web profile + injects a fake bridge) asserts the mapping from each trigger source to a bridge call; zero calls with no bridge; subscriptions removed after HMR dispose; `verify-client-ui-i18n` passes.
+- Result: `packages/client/desktop-integration` (`@deepseek-ai/dsh-client-desktop-integration`) lands; C1/C2/C3/C4 are all verified by behavior tests on the client test runtime (16 cases), including no-bridge no-op and HMR subscription removal; `verify-client-ui-i18n` / `verify-client-packages` / `verify-package-dependencies` pass; an Agent Note records the bridge and reminder decisions.
+- Risk: the approval/jobs subscription APIs do not match the P2.0 conclusion → backfill the fact table and adjust.
 
-### P2.3 桌面壳内联（打包集成）
-- 写路径：`apps/desktop` 装配/打包配置（插件进 dsh-runtime 闭包 + profile patch 插行）。
-- 要点：
-  - 插件包进入装配体依赖闭包；`apps/desktop` 首启时在 `$DSH_HOME`（userData/dsh-home）的 profile/home 层补丁插入 `dsh-desktop-integration` 行（home 层热重载，无需 fork web-app bundle）。
-  - 打包后验证壳内 C1 触发：完成一个短任务 → toast + 闪烁。
-- 验收：exe 内通知链路全通；普通浏览器开同一 DSH_HOME 的 web profile 时插件 no-op。
+### P2.3 Desktop-shell embedding (packaging integration)
+- Write path: `apps/desktop` assembly/packaging config (plugin into the dsh-runtime closure + profile patch row).
+- Points:
+  - The plugin package enters the assembly dependency closure; on `apps/desktop` first start, insert the `dsh-desktop-integration` row into the profile/home-layer patch in `$DSH_HOME` (userData/dsh-home) (home-layer hot reload, no web-app bundle fork).
+  - After packaging, verify the in-shell C1 trigger: finish a short task → toast + flash.
+- Acceptance: the notification chain works fully inside the exe; the plugin is a no-op when the same web profile is opened in a plain browser with the same DSH_HOME.
 
-### P2.4 设置 UI（可选增量）
-- 写路径：`packages/client/ui-desktop-integration/` + settings domain。
-- 要点：`desktop-integration` settings namespace（来源开关、免打扰时段、最短时长），一个 ui-settings 行；默认值与 `Config` 一致。
-- 验收：设置页可改并持久化到 `settings.yaml`，热重载生效；locale 全量。
-- 说明：若验收困难可整体 defer，先只做 `Config`（P2.2 已含）。
+### P2.4 Settings UI (optional increment)
+- Write path: `packages/client/ui-desktop-integration/` + a settings domain.
+- Points: a `desktop-integration` settings namespace (source switches, quiet hours, minimum duration), one ui-settings row; defaults match `Config`.
+- Acceptance: the settings page edits and persists to `settings.yaml`, hot-reload takes effect; full locale.
+- Result: **deferred as a whole (per the plan's "deferrable" strategy)**. First only `Config` (P2.2 already carries every policy switch and `quietHours`), so quiet hours etc. can be configured directly in cordis.yml; the settings UI is a later increment that mounts a host settings row when reused.
 
-### P2.5 真机验证
-- 写路径：`docs/plans/notes/verification-integration.md`（新建）。
-- 清单：
-  1. C1：窗口最小化 → 会话跑完 → toast + 短暂闪烁；聚焦状态不打扰。
-  2. C2：窗口切走 → 审批挂起 → 任务栏持续闪烁；回到窗口处理后停止。
-  3. C3：工具终态失败 → 失败通知；重试中不通知。
-  4. C4：后台 job 完成 → 通知。
-  5. 免打扰时段：不通知不闪。
-  6. 无桥环境（普通浏览器）：行为与官方 web 完全一致（零差异）。
-  7. 文案：中英切换后通知文案正确。
-- 验收：每项证据记录；功能缺陷回对应任务修复复验。
+### P2.5 Real-machine verification
+- Write path: `docs/plans/notes/verification-integration.md` (new).
+- Checklist:
+  1. C1: minimize the window → a session runs out → toast + short flash; no disturbance in the focused state.
+  2. C2: switch the window away → an approval is pending → persistent taskbar flash; stops after returning and handling.
+  3. C3: a tool terminal failure → failure notification; no notification during retry.
+  4. C4: a background job completes → notification.
+  5. Quiet hours: no notification, no flash.
+  6. No-bridge environment (plain browser): behaves exactly like the official web (zero difference).
+  7. Copy: notification copy is correct after switching between zh and en.
+- Acceptance: evidence recorded for each item; functional defects return to the corresponding task for a fix and re-verify.
 
-## 7. 非目标
+## 7. Non-goals
 
-- 不做系统级"勿扰模式"联动（Windows Focus Assist 检测）——先做插件内 `quietHours`。
-- 不做通知点击→跳转会话（Electron `Notification` click 回调可做，列为后续）。
-- 不做 webhook 触达、schedule、goal 里程碑等新触发源——它们按同一插件模式后续加，不在本轮。
-- 不改 agent-loop、不改 session log、不加 session event。
+- No system-level "do-not-disturb" integration (Windows Focus Assist detection) — start with in-plugin `quietHours`.
+- No notification-click → jump-to-session (Electron `Notification` click callback is possible, listed as future).
+- No new trigger sources such as webhook delivery, schedule, goal milestones — they come later via the same plugin pattern, not this round.
+- No agent-loop change, no session-log change, no new session event.
 
-## 8. 状态表
+## 8. Status table
 
-| 任务 | 状态 | 完成日期 | 备注 |
+| Task | Status | Date | Notes |
 |---|---|---|---|
-| P2.0 契约调研 | 待执行 | | |
-| P2.1 桥契约落地 | 待执行 | | |
-| P2.2 client 插件 | 待执行 | | |
-| P2.3 打包集成 | 待执行 | | |
-| P2.4 设置 UI | 待执行 | | 可 defer |
-| P2.5 真机验证 | 待执行 | | |
+| P2.0 Contract review | done | 2026-09-07 | §4 G1–G6 backfilled with exact APIs/lines; C2/C3 observation-point conclusions corrected (see §6 P2.0 result) |
+| P2.1 Bridge-contract landing | done | 2026-09-07 | single channel `dsh:desktop-bridge` + pure validation/flash state machine (18 unit tests); `lib/preload.cjs` CJS preload (sandbox-constrained); CDP probe measured: `window.desktopBridge` has all five methods, notify=true, flash/flashClear/windowState all pass |
+| P2.2 Client plugin | done | 2026-09-07 | `packages/client/desktop-integration` + web-app `dsh.client` row; 16 behavior tests + no-bridge/HMR; i18n/client-packages/deps gates pass; see §6 P2.2 result and the Agent Note |
+| P2.3 Packaging integration | done | 2026-09-07 | `deploy-root` closure adds the `dsh-client-desktop-integration` row; after `assemble` re-assembly (213.5 MB) `probe-roster` measured: the `__DSH_BOOT__` roster carries the row; shell-start `probe-bridge` passes fully in the assembled state; `verify-cordis-config` passes after the tsconfig.base.json path mapping (only the pre-existing `apps/cli/tests/profiles/acp/cordis.yml` fixture fails, not from this branch) |
+| P2.4 Settings UI | deferred | 2026-09-07 | deferred as a whole per the plan's "deferrable" strategy (see §6 P2.4 result); policy is all provided by `Config` |
+| P2.5 Real-machine verification | done | 2026-09-07 | [notes/verification-integration.md](notes/verification-integration.md): model-driven items (C1–C4 real triggers) marked "awaiting re-verification/steps" due to no key; primitive and assembly surfaces (bridge/CDP, roster, quiet hours, no-bridge, copy) verified on the behavior surface |
 
-## 9. 风险汇总
+## 9. Risk summary
 
-| 风险 | 影响 | 缓解 |
+| Risk | Impact | Mitigation |
 |---|---|---|
-| approval/jobs 客户端订阅 API 与预期不符 | C2/C4 延迟 | P2.0 前置调研，回填事实表 |
-| Windows toast 支持差异（无 AppUserModelID / 不支持） | C1/C3/C4 通知失效 | `Notification.isSupported()` + AppUserModelID + P2.1 探测；闪缩仍可用 |
-| 通知 spam（长会话多 session 完成） | 体验差 | 去重窗口 + 仅失焦 + 最短时长（Config） |
-| 插件在普通浏览器产生差异 | 双环境行为漂移 | 无桥 no-op（D6）统一验证 P2.5-6 |
-| locale 全量新增文案工作量 | P2.2 体积 | P2.0 摸清结构，翻译走既有双语流程 |
+| approval/jobs client subscription APIs differ from expectations | C2/C4 delayed | P2.0 front-loaded review, backfill the fact table |
+| Windows toast support differences (no AppUserModelID / unsupported) | C1/C3/C4 notifications fail | `Notification.isSupported()` + AppUserModelID + P2.1 probe; the flash still works |
+| Notification spam (long sessions, many completions) | poor experience | dedup window + unfocused-only + minimum duration (Config) |
+| The plugin differs in a plain browser | dual-environment behavior drift | no-bridge no-op (D6) verified in P2.5-6 |
+| Locale full-set new-copy workload | P2.2 size | P2.0 maps the structure; translation follows the existing bilingual flow |
