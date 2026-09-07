@@ -31,7 +31,7 @@ function fakeHost(overrides: Partial<DesktopBridgeHost> = {}): DesktopBridgeHost
   const focusListeners: Array<() => void> = []
   return {
     windowState: () => 'visible-unfocused' as const,
-    flashFrame: flag => { flashes.push(flag) },
+    flashFrame: (flag) => { flashes.push(flag) },
     notify: () => true,
     send: () => {},
     onWindowFocus: (listener) => {
@@ -71,7 +71,7 @@ describe('installDesktopBridge', () => {
   it('rejects callers that are not loopback pages', async () => {
     installDesktopBridge(fakeHost())
     const result = await registeredHandler()(fakeEvent('https://evil.example/'), { op: 'windowState' })
-    expect(result).toMatchObject({ ok: false, error: expect.stringContaining('loopback') })
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining('loopback') as string })
   })
 
   it('dispatches notify, flash, flashClear, and windowState to the host', async () => {
@@ -102,7 +102,7 @@ describe('installDesktopBridge', () => {
       op: 'flash',
       mode: { kind: 'duration', ms: -5 },
     })
-    expect(result).toMatchObject({ ok: false, error: expect.any(String) })
+    expect(result).toMatchObject({ ok: false, error: expect.any(String) as string })
     expect(host.flashes).toHaveLength(0)
   })
 
@@ -114,7 +114,7 @@ describe('installDesktopBridge', () => {
     expect(host.flashes).toEqual([true])
     const focus = host.focusListeners[0]
     expect(focus).toBeDefined()
-    focus!()
+    focus()
     expect(host.flashes).toEqual([true, false])
   })
 

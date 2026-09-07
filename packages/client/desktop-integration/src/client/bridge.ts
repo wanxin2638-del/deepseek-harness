@@ -5,14 +5,17 @@
  * and every caller treats its absence as a silent no-op (D6).
  */
 
+/** Shell window focus state pushed to the plugin; the shell's own classification. */
 export type DesktopWindowState = 'focused' | 'visible-unfocused' | 'minimized' | 'hidden'
 
+/** Toast payload accepted by the shell bridge; title/body length caps live on the main side. */
 export interface DesktopNotifyInput {
   readonly title: string
   readonly body: string
   readonly urgency: 'low' | 'normal' | 'critical'
 }
 
+/** Taskbar flash request: hold until the window regains focus, or run for a fixed duration. */
 export type DesktopFlashMode =
   | { readonly kind: 'until-focus' }
   | { readonly kind: 'duration'; readonly ms: number }
@@ -32,7 +35,10 @@ declare global {
   }
 }
 
-/** Read the bridge global; undefined outside the desktop shell. */
+/**
+ * Read the bridge global; undefined outside the desktop shell.
+ * @returns the desktop shell bridge, or undefined in a plain browser.
+ */
 export function getDesktopBridge(): DesktopBridge | undefined {
   return typeof window === 'undefined' ? undefined : window.desktopBridge
 }

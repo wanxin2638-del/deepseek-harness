@@ -30,7 +30,7 @@ export interface DesktopBridgeHost {
  * @returns disposer that removes the handler and flash listeners.
  */
 export function installDesktopBridge(host: DesktopBridgeHost): () => void {
-  const flash = new FlashController(flag => { host.flashFrame(flag) })
+  const flash = new FlashController((flag) => { host.flashFrame(flag) })
   const disposeFocus = host.onWindowFocus(() => { flash.clear() })
   const handler = (event: IpcMainInvokeEvent, payload: unknown): BridgeResponse => {
     const caller = event.senderFrame?.url ?? event.sender.getURL()

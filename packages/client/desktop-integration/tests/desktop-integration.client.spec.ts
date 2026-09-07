@@ -82,7 +82,7 @@ async function bench(options: {
 } = {}): Promise<Bench> {
   // ctx.plugin passes config verbatim (no Loader resolution in this lane), so
   // materialize the schema defaults here, then layer the test overrides.
-  const config = { ...Config({}), ...(options.config ?? {}) } as never
+  const config = Config(options.config ?? {})
   const runtime = await SlotTestRuntime.create()
   const remote = new TestRemote(runtime.ctx)
   // The locale plugin binds a settings scope; the same stubs ui-jobs uses.
@@ -93,7 +93,7 @@ async function bench(options: {
 
   const bridge = options.bridgePresent === false ? undefined : new FakeBridge()
   if (bridge !== undefined) window.desktopBridge = bridge
-  const fiber = runtime.ctx.plugin({ inject, apply, Config }, config as never)
+  const fiber = runtime.ctx.plugin({ inject, apply, Config }, config)
   await fiber.await()
   // The initial bridge.windowState() read resolves in a microtask.
   await Promise.resolve()
@@ -125,7 +125,7 @@ function addJob(sessionId: string, job: Partial<SessionJob>): SessionJob {
 function jobMap(sessionId: string, jobs: readonly SessionJob[]): SessionListState['jobsBySession'] {
   const map: Record<string, readonly SessionJob[]> = {}
   map[sessionId] = jobs
-  return map as SessionListState['jobsBySession']
+  return map
 }
 
 /** Publish one pending approval interaction through the real ui-session registry. */
@@ -159,7 +159,7 @@ describe('desktop-integration browser half', () => {
     const bench_ = await bench()
     try {
       await bench_.runtime.sessions.add({
-        id: 's1' as SessionId,
+        id: 's1',
         summary: { title: '写文档', displayTitle: '写文档', running: true },
       }, { current: false })
       await bench_.runtime.sessions.updateSummary('s1', { running: false, completed: true })
@@ -178,7 +178,7 @@ describe('desktop-integration browser half', () => {
     const bench_ = await bench()
     try {
       await bench_.runtime.sessions.add({
-        id: 's1' as SessionId,
+        id: 's1',
         summary: { title: '写文档', completed: true },
       }, { current: false })
       await bench_.runtime.sessions.updateSummary('s1', { updatedAt: 99 })
@@ -192,7 +192,7 @@ describe('desktop-integration browser half', () => {
     const bench_ = await bench()
     try {
       await bench_.runtime.sessions.add({
-        id: 's1' as SessionId,
+        id: 's1',
         summary: { title: '写文档', displayTitle: '写文档', running: true },
       }, { current: false })
       bench_.bridge?.setState('focused')
@@ -207,7 +207,7 @@ describe('desktop-integration browser half', () => {
     const bench_ = await bench({ config: { completionMinDurationMs: 60_000 } })
     try {
       await bench_.runtime.sessions.add({
-        id: 's1' as SessionId,
+        id: 's1',
         summary: { title: '写文档', displayTitle: '写文档', running: true },
       }, { current: false })
       await bench_.runtime.sessions.updateSummary('s1', { running: false, completed: true })
@@ -246,7 +246,7 @@ describe('desktop-integration browser half', () => {
     const bench_ = await bench()
     try {
       await bench_.runtime.sessions.add({
-        id: 's1' as SessionId,
+        id: 's1',
         summary: { title: '写文档', displayTitle: '写文档' },
       }, { current: false })
       bench_.remote.emit('api-session/error', ['s1', 'provider blew up'])
@@ -264,7 +264,7 @@ describe('desktop-integration browser half', () => {
   it('C3: dedupes within the dedupe window', async () => {
     const bench_ = await bench({ config: { dedupeWindowMs: 60_000 } })
     try {
-      await bench_.runtime.sessions.add({ id: 's1' as SessionId }, { current: false })
+      await bench_.runtime.sessions.add({ id: 's1' }, { current: false })
       bench_.remote.emit('api-session/error', ['s1', 'first'])
       bench_.remote.emit('api-session/error', ['s1', 'second'])
       expect(notifyCalls(bench_.bridge)).toHaveLength(1)
@@ -278,7 +278,7 @@ describe('desktop-integration browser half', () => {
     const endHour = hour === 23 ? 24 : hour + 1
     const bench_ = await bench({ config: { quietHours: { startHour: hour, endHour } } })
     try {
-      await bench_.runtime.sessions.add({ id: 's1' as SessionId }, { current: false })
+      await bench_.runtime.sessions.add({ id: 's1' }, { current: false })
       bench_.remote.emit('api-session/error', ['s1', 'quiet'])
       expect(notifyCalls(bench_.bridge)).toEqual([])
     } finally {
@@ -290,7 +290,7 @@ describe('desktop-integration browser half', () => {
     const bench_ = await bench()
     try {
       await bench_.runtime.sessions.add({
-        id: 's1' as SessionId,
+        id: 's1',
         summary: { title: '写文档', displayTitle: '写文档' },
       }, { current: false })
       const running = addJob('s1', { label: '导出报告' })
@@ -317,7 +317,7 @@ describe('desktop-integration browser half', () => {
   it('C4: a failed job notifies critically', async () => {
     const bench_ = await bench()
     try {
-      await bench_.runtime.sessions.add({ id: 's1' as SessionId }, { current: false })
+      await bench_.runtime.sessions.add({ id: 's1' }, { current: false })
       const running = addJob('s1', { label: '导入数据' })
       bench_.runtime.sessions.list.update((draft) => {
         draft.jobsBySession = jobMap('s1', [running])
@@ -338,7 +338,7 @@ describe('desktop-integration browser half', () => {
     const bench_ = await bench({ bridgePresent: false })
     try {
       await bench_.runtime.sessions.add({
-        id: 's1' as SessionId,
+        id: 's1',
         summary: { running: true },
       }, { current: false })
       await bench_.runtime.sessions.updateSummary('s1', { running: false, completed: true })
@@ -354,7 +354,7 @@ describe('desktop-integration browser half', () => {
     try {
       const { fiber, runtime } = bench_
       await runtime.sessions.add({
-        id: 's1' as SessionId,
+        id: 's1',
         summary: { title: '写文档', displayTitle: '写文档', running: true },
       }, { current: false })
       await runtime.sessions.updateSummary('s1', { running: false, completed: true })
@@ -362,7 +362,7 @@ describe('desktop-integration browser half', () => {
       expect(before).toBe(1)
       await fiber.dispose()
       await runtime.sessions.add({
-        id: 's2' as SessionId,
+        id: 's2',
         summary: { title: '第二个', running: true },
       }, { current: false })
       await runtime.sessions.updateSummary('s2', { running: false, completed: true })
@@ -380,7 +380,7 @@ describe('desktop-integration browser half', () => {
     const english = await bench({ locale: 'en' })
     try {
       await english.runtime.sessions.add({
-        id: 's1' as SessionId,
+        id: 's1',
         summary: { title: 'Doc', displayTitle: 'Doc', running: true },
       }, { current: false })
       await english.runtime.sessions.updateSummary('s1', { running: false, completed: true })

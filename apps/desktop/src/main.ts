@@ -114,12 +114,12 @@ function installWindowBridge(win: BrowserWindow): void {
   win.on('hide', pushState)
   const disposeBridge = installDesktopBridge({
     windowState: () => windowStateOf(win),
-    flashFrame: flag => { win.flashFrame(flag) },
+    flashFrame: (flag) => { win.flashFrame(flag) },
     notify: input => showNotification(input),
     send: (channel, payload) => {
       if (!win.webContents.isDestroyed()) win.webContents.send(channel, payload)
     },
-    onWindowFocus: listener => {
+    onWindowFocus: (listener) => {
       win.on('focus', listener)
       return () => { win.removeListener('focus', listener) }
     },

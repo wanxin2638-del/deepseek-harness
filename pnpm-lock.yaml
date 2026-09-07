@@ -585,6 +585,9 @@ importers:
       '@deepseek-ai/dsh-client-connection':
         specifier: workspace:^
         version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-client-desktop-integration':
+        specifier: workspace:^
+        version: link:../../../packages/client/desktop-integration
       '@deepseek-ai/dsh-client-file-upload':
         specifier: workspace:^
         version: link:../../../packages/client/file-upload

@@ -85,7 +85,7 @@ function truncate(value: string): string {
  */
 export function apply(ctx: Context, config: Config = Config({})): void {
   const cfg = config as Required<Config>
-  if (cfg.enabled === false) return
+  if (!cfg.enabled) return
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'desktop-integration: dictionaries')
   const t = ctx.locale.bind(NS)
   const bridge = getDesktopBridge()
@@ -100,7 +100,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   const inQuietHours = (): boolean => {
     const range = cfg.quietHours
     // Config arrives from cordis.yml; a missing range means no quiet hours.
-    if (range === undefined || range === null) return false
+    if (range == null) return false
     const hour = new Date().getHours()
     return range.startHour <= range.endHour
       ? hour >= range.startHour && hour < range.endHour
