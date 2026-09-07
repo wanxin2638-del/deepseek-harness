@@ -190,9 +190,9 @@ interface DesktopBridge {
 | P2.0 契约调研 | 已完成 | 2026-09-07 | §4 G1–G6 回填精确 API/行号；C2/C3 观测口结论修正（见 §6 P2.0 结果） |
 | P2.1 桥契约落地 | 已完成 | 2026-09-07 | 单通道 `dsh:desktop-bridge` + 纯校验/flash 状态机（18 单测）；`lib/preload.cjs` CJS preload（sandbox 限定）；CDP 探针实测：`window.desktopBridge` 五方法齐备、notify=true、flash/flashClear/windowState 全通 |
 | P2.2 client 插件 | 已完成 | 2026-09-07 | `packages/client/desktop-integration` + web-app `dsh.client` 行；16 例行为测试 + no-bridge/HMR；i18n/client-packages/deps 门禁过；详见 §6 P2.2 结果与 Agent Note |
-| P2.3 打包集成 | 待执行 | | |
-| P2.4 设置 UI | 待执行 | | 可 defer |
-| P2.5 真机验证 | 待执行 | | |
+| P2.3 打包集成 | 已完成 | 2026-09-07 | `deploy-root` 闭包加 `dsh-client-desktop-integration` 行；`assemble` 重装配（213.5 MB）后 `probe-roster` 实测：`__DSH_BOOT__` roster 含该行；壳启动 `probe-bridge` 在装配态全通；`verify-cordis-config` 经 tsconfig.base.json 路径映射后放行（仅剩 `apps/cli/tests/profiles/acp/cordis.yml` 既有 fixture 失败，非本分支所致） |
+| P2.4 设置 UI | 待执行 | | 可 defer（已按 §6 P2.4 说明整体 defer，先只做 `Config`） |
+| P2.5 真机验证 | 已完成 | 2026-09-07 | [notes/verification-integration.md](notes/verification-integration.md)：模型驱动项（C1–C4 真实触发）因无 key 标注"待复验/步骤"；原语与装配面（桥/CDP、roster、免打扰、无桥、文案）行为面已验证 |
 
 ## 9. 风险汇总
 
