@@ -162,7 +162,7 @@ interface DesktopBridge {
 - 写路径：`packages/client/ui-desktop-integration/` + settings domain。
 - 要点：`desktop-integration` settings namespace（来源开关、免打扰时段、最短时长），一个 ui-settings 行；默认值与 `Config` 一致。
 - 验收：设置页可改并持久化到 `settings.yaml`，热重载生效；locale 全量。
-- 说明：若验收困难可整体 defer，先只做 `Config`（P2.2 已含）。
+- 结果：**整体 defer（按计划"可 defer"策略）**。先只做 `Config`（P2.2 已含全部策略开关与 `quietHours`），免打扰等可在 cordis.yml 直接配置；设置 UI 作为后续增量，复用时挂宿主 settings 行即可。
 
 ### P2.5 真机验证
 - 写路径：`docs/plans/notes/verification-integration.md`（新建）。
@@ -191,7 +191,7 @@ interface DesktopBridge {
 | P2.1 桥契约落地 | 已完成 | 2026-09-07 | 单通道 `dsh:desktop-bridge` + 纯校验/flash 状态机（18 单测）；`lib/preload.cjs` CJS preload（sandbox 限定）；CDP 探针实测：`window.desktopBridge` 五方法齐备、notify=true、flash/flashClear/windowState 全通 |
 | P2.2 client 插件 | 已完成 | 2026-09-07 | `packages/client/desktop-integration` + web-app `dsh.client` 行；16 例行为测试 + no-bridge/HMR；i18n/client-packages/deps 门禁过；详见 §6 P2.2 结果与 Agent Note |
 | P2.3 打包集成 | 已完成 | 2026-09-07 | `deploy-root` 闭包加 `dsh-client-desktop-integration` 行；`assemble` 重装配（213.5 MB）后 `probe-roster` 实测：`__DSH_BOOT__` roster 含该行；壳启动 `probe-bridge` 在装配态全通；`verify-cordis-config` 经 tsconfig.base.json 路径映射后放行（仅剩 `apps/cli/tests/profiles/acp/cordis.yml` 既有 fixture 失败，非本分支所致） |
-| P2.4 设置 UI | 待执行 | | 可 defer（已按 §6 P2.4 说明整体 defer，先只做 `Config`） |
+| P2.4 设置 UI | 已 defer | 2026-09-07 | 按计划"可 defer"策略整体 defer（见 §6 P2.4 结果）；策略均由 `Config` 提供 |
 | P2.5 真机验证 | 已完成 | 2026-09-07 | [notes/verification-integration.md](notes/verification-integration.md)：模型驱动项（C1–C4 真实触发）因无 key 标注"待复验/步骤"；原语与装配面（桥/CDP、roster、免打扰、无桥、文案）行为面已验证 |
 
 ## 9. 风险汇总
