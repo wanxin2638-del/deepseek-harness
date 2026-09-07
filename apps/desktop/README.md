@@ -1,5 +1,7 @@
 # @deepseek-ai/dsh-desktop
 
+English | [中文](README.zh.md)
+
 Windows portable Electron shell hosting the official DeepSeek Harness Web backend (`dsh --profile web`). The shell is a host, not a plugin: it spawns the backend, resolves its ready URL, completes the login exchange, constrains navigation, and cleans up the child process tree on exit. It carries no product logic.
 
 ## Usage
