@@ -37,6 +37,7 @@ pnpm --filter @deepseek-ai/dsh-desktop assemble
 
 # 4. Launch directly from the package (avoids the --filter deps-status check).
 cd apps\desktop
+pnpm add -D lefthook -w
 pnpm start
 ```
 
