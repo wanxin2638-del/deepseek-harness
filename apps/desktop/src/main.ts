@@ -96,6 +96,7 @@ function createWindow(): void {
     event.preventDefault()
     void shell.openExternal(url)
   })
+  win.webContents.openDevTools()
 }
 
 /** Install the desktop bridge (Platform 2 primitives) and push window-state transitions to the page. */

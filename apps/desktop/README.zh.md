@@ -15,6 +15,33 @@ pnpm --filter @deepseek-ai/dsh-desktop start      # launch the shell in dev (use
 pnpm --filter @deepseek-ai/dsh-desktop dist       # build the portable exe into release/
 ```
 
+## Windows：从全新状态冷启动
+
+上面的步骤从仓库根在 POSIX shell 下运行。在 Windows PowerShell 上，`&&` 分隔符与 `--filter ... start` 的 deps-status 检查都会碍事：PowerShell 拒绝 `&&`（改用 `;` 或分行），而 `pnpm --filter @deepseek-ai/dsh-desktop start` 会先运行 `pnpm install --production`，其根 postinstall 在缺少开发依赖（Electron 与 lefthook 都是 dev deps）时失败。请改跑下面的工作表：
+
+```powershell
+# 1. Re-link all workspace dependencies (dev + prod), purging any stale tree.
+pnpm install --config.confirmModulesPurge=false
+
+# 2. If Electron's binary was never downloaded, fetch it through your proxy.
+cd apps\desktop
+$env:HTTPS_PROXY='http://127.0.0.1:7897'
+$env:HTTP_PROXY='http://127.0.0.1:7897'
+node node_modules\electron\install.js
+
+# 3. Build and stage the runtime.
+cd ..\..
+pnpm run build
+pnpm run build:web
+pnpm --filter @deepseek-ai/dsh-desktop assemble
+
+# 4. Launch directly from the package (avoids the --filter deps-status check).
+cd apps\desktop
+pnpm start
+```
+
+第 2 步仅在 `apps\desktop\node_modules\electron\dist\electron.exe` 不存在的机器上需要；代理地址是你的本地 HTTP 代理，不是硬性要求。
+
 便携 exe 完全自包含：它内嵌 Electron 运行时、装配后的后端闭包（`resources/dsh-runtime`）与独立 Node 运行时（`resources/node/node.exe`），因此收件机无需 Node、pnpm、Python 或 git。后端与壳状态存放于 `%APPDATA%\DeepSeek Harness Desktop\dsh-home`（壳注入 `DSH_HOME`；`.env` 无法设置它）。
 
 `assemble` 还会运行 ABI 探针（D2）：它在机器 Node 下启动暂存后端，期望就绪行加 `GET / → 401`，并把探针得到的 `node.exe` 暂存为 `.runtime-node/node.exe` 作为打包载荷。

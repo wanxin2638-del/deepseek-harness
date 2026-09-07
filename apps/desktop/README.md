@@ -15,6 +15,38 @@ pnpm --filter @deepseek-ai/dsh-desktop start      # launch the shell in dev (use
 pnpm --filter @deepseek-ai/dsh-desktop dist       # build the portable exe into release/
 ```
 
+## Windows: cold start from a fresh state
+
+The steps above run on a POSIX shell from the workspace root. On Windows PowerShell the
+`&&` separator and the `--filter ... start` deps-status check both get in the way: PowerShell
+rejects `&&` (use `;` or separate lines), and `pnpm --filter @deepseek-ai/dsh-desktop start`
+first runs `pnpm install --production`, whose root postinstall fails when dev dependencies are
+missing (Electron and lefthook are dev deps). Run the worksheet below instead:
+
+```powershell
+# 1. Re-link all workspace dependencies (dev + prod), purging any stale tree.
+pnpm install --config.confirmModulesPurge=false
+
+# 2. If Electron's binary was never downloaded, fetch it through your proxy.
+cd apps\desktop
+$env:HTTPS_PROXY='http://127.0.0.1:7897'
+$env:HTTP_PROXY='http://127.0.0.1:7897'
+node node_modules\electron\install.js
+
+# 3. Build and stage the runtime.
+cd ..\..
+pnpm run build
+pnpm run build:web
+pnpm --filter @deepseek-ai/dsh-desktop assemble
+
+# 4. Launch directly from the package (avoids the --filter deps-status check).
+cd apps\desktop
+pnpm start
+```
+
+Step 2 is only needed on a machine where `apps\desktop\node_modules\electron\dist\electron.exe`
+does not exist; the proxy address is your local HTTP proxy, not a hard requirement.
+
 The portable exe is fully self-contained: it embeds the Electron runtime, the assembled backend closure (`resources/dsh-runtime`), and a standalone Node runtime (`resources/node/node.exe`), so the recipient machine needs no Node, pnpm, Python, or git. Backend and shell state live under `%APPDATA%\DeepSeek Harness Desktop\dsh-home` (the shell injects `DSH_HOME`; `.env` cannot set it).
 
 `assemble` also runs the ABI probe (D2): it launches the staged backend under the machine's Node, expects the ready line plus `GET / → 401`, and stages the probed `node.exe` as `.runtime-node/node.exe` for the packaged payload.
