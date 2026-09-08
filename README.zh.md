@@ -61,7 +61,7 @@ npm start
 pnpm --config.verify-deps-before-run=false start
 ```
 
-该 pnpm 参数只关闭本次启动前的依赖检查。在 pnpm 11.7.0 中，生产模式的工作区状态可能使该检查执行 `install --production`，移除 Electron 和 `lefthook` 等开发依赖。
+该 pnpm 参数只关闭本次启动前的依赖检查。在 pnpm 11.7.0 中，生产模式的工作区状态可能使该检查执行 `install --production`，移除 Electron 等开发依赖。
 
 如果这些依赖已被移除，在启动前从仓库根目录恢复：
 

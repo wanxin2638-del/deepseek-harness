@@ -221,10 +221,7 @@ export const longProbe = 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 +
     expect(packageJson.devDependencies).not.toHaveProperty('@typescript-eslint/parser')
     expect(existsSync(join(repositoryRoot, 'eslint.format.config.mjs'))).toBe(false)
 
-    const lefthook = await readFile(join(repositoryRoot, 'lefthook.yml'), 'utf8')
-    expect(lefthook).toContain('scripts/run-oxlint.ts --config .oxlintrc.staged.json --fix')
-    expect(lefthook).not.toContain('node_modules/.bin/eslint')
-    expect(lefthook).not.toContain('eslint.format.config.mjs')
+    expect(existsSync(join(repositoryRoot, 'lefthook.yml'))).toBe(false)
   })
 
   it('reports an unused suppression', async () => {
@@ -258,7 +255,7 @@ export const longProbe = 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 +
     const result = runOxlint([
       '--fix',
       '--no-error-on-unmatched-pattern',
-      'scripts/install-lefthook.mjs',
+      'scripts/demo-ptc.mjs',
     ])
 
     expect(result.error).toBeUndefined()

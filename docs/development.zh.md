@@ -12,7 +12,7 @@
 
 - Node.js 支持 22.19+ 与 24+。CI 覆盖 22.19、24 和 26；见 [Node 引擎下限 Agent Note](../.agents/notes/implemented/process/2026-07-06-node-engine-floor.zh.md)。
 - 启用了 Corepack 的 pnpm。仓库在 `package.json` 中固定使用 `pnpm@11.7.0`；如果 `pnpm --version` 无法通过 Corepack 解析，请先运行 `corepack enable`。
-- Git 2.26 或更高版本；钩子设置会启用 Git 的 worktree 专属配置扩展。
+- Git 2.26 或更高版本；配对设置会启用 Git 的 worktree 专属配置扩展。
 - 可选：一个 DeepSeek API key，用于 Web、headless 和 ACP（Agent Client Protocol）自动化 agent（智能体）演示以及真实 API 的 e2e 测试。
 
 ### 首次搭建
@@ -23,15 +23,15 @@
 pnpm install
 ```
 
-安装过程还会通过 `scripts/install-lefthook.mjs` 配置 worktree 本地的 Lefthook 钩子和 `dsh-translation-pairing` Git 合并驱动。[worktree 本地钩子 Agent Note](../.agents/notes/implemented/process/2026-07-27-worktree-local-lefthook.zh.md) 负责钩子路径的安全约定；[自动配对合并 Agent Note](../.agents/notes/implemented/process/2026-08-08-automatic-translation-pairing-merges.zh.md) 负责合并驱动。
+安装过程会通过 `scripts/install-translation-pairing.mjs` 配置 worktree 本地的 `dsh-translation-pairing` Git 合并驱动。[自动配对合并 Agent Note](../.agents/notes/implemented/process/2026-08-08-automatic-translation-pairing-merges.zh.md) 负责这项集成。
 
-如果依赖是从缓存恢复或 `postinstall` 被跳过而导致任一集成缺失，请手动安装：
+如果依赖是从缓存恢复或 `postinstall` 被跳过而导致配对集成缺失，请手动安装：
 
 ```sh
-node scripts/install-lefthook.mjs
+node scripts/install-translation-pairing.mjs
 ```
 
-如果包装脚本拒绝现有 Git 配置或报告陈旧锁，请遵循其诊断和所链接的 Agent Note，不要凭猜测编辑 worktree 元数据。移动检出目录后，请重新运行包装脚本以重新生成自有路径。
+如果安装脚本拒绝现有 Git 配置或报告陈旧锁，请遵循其诊断和所链接的 Agent Note，不要凭猜测编辑 worktree 元数据。
 
 新克隆后请先运行一次类型检查：
 
@@ -108,19 +108,11 @@ DEEPSEEK_BASE_URL=https://... # optional
 
 当两种语言的文件都使用 Git 默认文本策略且能干净合并时，配对合并驱动会根据已确认的祖先、当前和另一侧的配对文档 blob，推导出发生冲突的 `.i18n.yaml` 记录。配对文档发生冲突、存在非文本合并配置或记录无效时，它会拒绝处理并保留冲突；如果合并已经因冲突而停止，请运行 `pnpm run resolve-translation-pairing-conflicts`，该命令会暂存每份可安全生成的配对记录；如果其他配对冲突仍需手工处理，则以非零状态退出。[双语文档约定](i18n/README.zh.md#the-pairing-contract)列出该驱动接受的确切文件和状态。
 
-安装脚本在发布 worktree 配置前，会探测确切的 Node/tsx 驱动入口点。如果该运行时之后变得不可用，不依赖 Node 的启动器会写入 Git 的普通文本合并结果、让伴随文件保持未解决状态，并打印恢复路径；请恢复依赖后运行 `pnpm run resolve-translation-pairing-conflicts`，或运行 `git merge --abort`。如果 `pre-merge-commit` 拒绝原本能干净完成的合并，Git 会把完整结果留在暂存区但不创建提交；请修复失败后运行 `git commit`，或中止合并。确切的索引与 `MERGE_HEAD` 状态由[自动配对合并 Agent Note](../.agents/notes/implemented/process/2026-08-08-automatic-translation-pairing-merges.zh.md#failure-contract)负责记录。
+安装脚本在发布 worktree 配置前，会探测确切的 Node/tsx 驱动入口点。如果该运行时之后变得不可用，不依赖 Node 的启动器会写入 Git 的普通文本合并结果、让伴随文件保持未解决状态，并打印恢复路径；请恢复依赖后运行 `pnpm run resolve-translation-pairing-conflicts`，或运行 `git merge --abort`。确切的索引与 `MERGE_HEAD` 状态由[自动配对合并 Agent Note](../.agents/notes/implemented/process/2026-08-08-automatic-translation-pairing-merges.zh.md#failure-contract)负责记录。
 
-lefthook 在 `lefthook.yml` 中配置，作为快速的本地检查点：
+仓库不会安装 commit、merge 或 push 钩子。贡献者只运行一次[与改动行为相关的检查](../AGENTS.md#run-relevant-checks-locally)；CI 负责全量覆盖率门禁、构建产物冒烟测试，以及 Node 22.19、24 和 26 兼容性矩阵。
 
-- `pre-commit` 对照暂存的配对文档 blob 校验暂存的配对记录，使用不加载项目的 `.oxlintrc.staged.json` 配置验证暂存文件，并通过一次有界重试应用 Oxlint 修复，在暂存文件属于 `THIRD_PARTY_NOTICES.md` 的输入时重新生成该文件，然后检查暂存 diff 中的空白错误，并运行 vendor manifest（元数据清单）守卫；
-- `pre-merge-commit` 在 Git 创建自动合并提交前执行同样以索引为准的配对检查；
-- `pre-push` 运行 `pnpm run typecheck`；该命令会先完成包含 Typert 约定生成的完整 Host lib 阶段，再运行 Client TypeScript 检查。
-
-vendor manifest 守卫检查 `vendor/*/src` 下的改动是否连同对应的 `vendor/README.md` manifest 更新一起暂存。请在编辑 vendor 代码前先阅读 `vendor/README.md`。
-
-除限定范围的暂存记录校验外，这些钩子有意不运行测试、快照、文档检查、构建或 `hygiene`。贡献者只运行一次[与改动行为相关的检查](../AGENTS.md#run-relevant-checks-locally)；CI 负责全量覆盖率门禁、构建产物冒烟测试，以及 Node 22.19、24 和 26 兼容性矩阵。
-
-贡献者可以选择运行 `pnpm run check:all`，执行全面的本地门禁集。该命令独立于 Git 钩子，也不是对 agent 的指令。
+贡献者可以选择运行 `pnpm run check:all`，执行全面的本地门禁集。该命令独立于配对合并驱动，也不是对 agent 的指令。
 
 ### CI 门禁
 

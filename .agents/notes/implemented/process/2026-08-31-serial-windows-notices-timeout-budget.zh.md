@@ -18,7 +18,7 @@ Status: implemented
 
 1. [scripts/gen-third-party-notices.ts](../../../../scripts/gen-third-party-notices.ts) 在 `render()` 里只加载一次 workspace manifest，把 map 沿 `collectNpmDeps` → `installedMetadata` → `installedManifest` → `workspaceLinkedManifest` 显式传递，不再按外部依赖名逐个重载。同一 checkout 下冷 `render()` 墙钟从约 893 ms 降到约 86 ms，输出逐字节一致（改动前后渲染结果 diff 验证）。
 
-2. [ci-master.yml](../../../../.github/workflows/ci-master.yml) `serial-windows` 的 "Run complete unsharded Windows gate inventory serially" 步骤增加 `DSH_COVERAGE_TEST_TIMEOUT_MS: '90000'`，与 pull-request `windows-coverage` lane 对齐。这是把 [Windows 覆盖率 lane 的 hook 预算与 Lefthook 套件预算 note](../testing/2026-08-29-windows-lane-hook-and-lefthook-budget.zh.md) 定义的 per-test、expect.poll 与 hook 预算机制扩展到第二个 lane；该 note 记录了哪些 lane 设置此 env。`scripts/ci-workflow.spec.ts` 用 `toMatchObject` 断言钉住该 env；删掉 env 会让 spec 变红（已做负例验证）。
+2. [ci-master.yml](../../../../.github/workflows/ci-master.yml) `serial-windows` 的 "Run complete unsharded Windows gate inventory serially" 步骤增加 `DSH_COVERAGE_TEST_TIMEOUT_MS: '90000'`，与 pull-request `windows-coverage` lane 对齐。`scripts/ci-workflow.spec.ts` 用 `toMatchObject` 断言钉住该 env；删掉 env 会让 spec 变红（已做负例验证）。
 
 ## Alternatives considered
 

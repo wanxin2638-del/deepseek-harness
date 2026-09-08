@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-install-lefthook 与 translation-pairing 的 fixture 把仓库真实的 `scripts/`、`node_modules` 和 tsx 包目录用 junction 链进 fixture 树，让 installer 探测能穿透解析。Windows 的递归删除可能把 junction（MOUNT_POINT 重解析点）当作目录并跟随进其目标；Git 的 `worktree remove` 正是这样删掉了仓库被跟踪的 `scripts/` 和 tsx 包（事故的插桩把删除定位到这一步）。因此，信任删除器的 fixture 清理删掉的是仓库自己的源码，而不是 fixture。
+translation-pairing 的 fixture 把仓库真实的 `scripts/`、`node_modules` 和 tsx 包目录用 junction 链进 fixture 树，让 installer 探测能穿透解析。Windows 的递归删除可能把 junction（MOUNT_POINT 重解析点）当作目录并跟随进其目标；Git 的 `worktree remove` 正是这样删掉了仓库被跟踪的 `scripts/` 和 tsx 包（事故的插桩把删除定位到这一步）。因此，信任删除器的 fixture 清理删掉的是仓库自己的源码，而不是 fixture。
 
 ## 决策
 

@@ -14,9 +14,7 @@ Status: implemented
 
 [`THIRD_PARTY_NOTICES.md`](../../../../THIRD_PARTY_NOTICES.md) 由 [`scripts/gen-third-party-notices.ts`](../../../../scripts/gen-third-party-notices.ts) 依据各工作区 manifest、`vendor/README.md`、`pyproject.toml` 与 `pnpm-workspace.yaml` 生成。根 README 双语两侧都从「许可证」一节链到该文件。
 
-**新鲜度会得到维护，而非仅靠校验。** 只要暂存了生成器的任一输入——任何 manifest、工作区声明、根锁文件、`vendor/README.md`、某个 `pyproject.toml`、生成器自身，或持有构建期 pin 的脚本——pre-commit 任务就会重新生成该文件并将其暂存，改依赖的人不必事后再折返跑一次生成器。已提交的字节随后由 [`scripts/gen-third-party-notices.spec.ts`](../../../../scripts/gen-third-party-notices.spec.ts) 断言，而测试 lane 本就会跑这个文件——这项校验不增加门禁进程、不占调度位、也不新增 CI 步骤。需要单独校验时，`pnpm run verify-third-party-notices` 仍然可用。
-
-有一处触发缺口是接受而非绕过的：lefthook 只检视磁盘上存在的文件，因此**删除** manifest 不会触发任何任务，移除一个包会落到测试 lane 的断言上。重构暂存文件列表以纳入删除的做法不成立——无论怎么给列表，lefthook 都会拿工作树过滤一遍。这个场景正由断言兜底。
+**新鲜度会得到维护，而非仅靠校验。** 已提交的字节由 [`scripts/gen-third-party-notices.spec.ts`](../../../../scripts/gen-third-party-notices.spec.ts) 断言，而测试 lane 本就会运行这个文件。需要单独校验时，`pnpm run verify-third-party-notices` 仍然可用。
 
 文件默认只披露**直接**依赖。完整的 npm 闭包连同锁定版本已记录在 `pnpm-lock.yaml`（`pnpm licenses list` 可渲染），Python 闭包记录在 `python/sdk/uv.lock`；再用散文誊一遍只会得到一份更差的副本。唯一明确披露的传递依赖，是 `@anthropic-ai/claude-agent-sdk` 通过 `optionalDependencies` 声明的官方 Claude 平台载荷集合，因为这些包承载随产品分发的 Claude Code 可执行文件，而非普通的库实现细节。
 
@@ -52,7 +50,7 @@ Claude 分发测试证明：只有精确匹配的直接 SDK 身份会绕过通�
 
 ## 后果
 
-此后改动依赖时，重新生成的披露文件会随同一个提交入库。触及 manifest 的提交多付一次生成器运行——约一秒；其余提交不受影响。若禁用钩子提交，代价推迟为一次测试 lane 失败，其报错会指明补救命令。
+改动依赖时，需要在提交前运行 notices 生成器或校验命令。测试 lane 也会报告过期输出，并指出修复所需的命令。
 
 生成器需要已安装的依赖树，因此比纯源码生成器更重；发布元数据不可用的新包需要补一条 `OVERRIDES`，而不是默默渲染出空白许可证。这两类失败都会明确报错并指出补救方式。
 

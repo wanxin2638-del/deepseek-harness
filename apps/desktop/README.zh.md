@@ -39,7 +39,6 @@ pnpm --filter @deepseek-ai/dsh-desktop assemble
 
 # 4. Launch the installed Electron app.
 cd apps\desktop
-pnpm add -D lefthook -w
 npm start
 
 ```

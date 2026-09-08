@@ -2,10 +2,8 @@
 import { randomUUID } from 'node:crypto'
 import {
     closeSync,
-    existsSync,
     fstatSync,
     lstatSync,
-    mkdirSync,
     openSync,
     readdirSync,
     readFileSync,
@@ -13,19 +11,12 @@ import {
     writeFileSync,
 } from 'node:fs'
 import { spawnSync } from 'node:child_process'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
-import lefthookPackage from 'lefthook/package.json' with { type: 'json' }
-
+import { isAbsolute, join, resolve } from 'node:path'
 const MINIMUM_GIT = [2, 26, 0]
-const HOOKS_DIRECTORY = 'dsh-hooks'
-const OWNERSHIP_MARKER = '.dsh-lefthook-owned'
-const OWNERSHIP_MARKER_VERSION = 1
-const OWNERSHIP_MARKER_OWNER = 'deepseek-harness worktree-local lefthook hooks'
-const INSTALL_LOCK = 'dsh-lefthook-install.lock'
+const INSTALL_LOCK = 'dsh-translation-pairing-install.lock'
 const INSTALL_LOCK_TIMEOUT_MS = 30_000
 const INSTALL_LOCK_INITIALIZATION_TIMEOUT_MS = 5_000
 const INSTALL_LOCK_POLL_MS = 50
-const ALLOW_HOOKS_PATH_OVERRIDE = 'DSH_LEFTHOOK_ALLOW_HOOKS_PATH_OVERRIDE'
 const REPOSITORY_EXTENSION_PATTERN = '^extensions\\.'
 const PAIRING_MERGE_DRIVER_CONFIG = [
     ['merge.dsh-translation-pairing.name', 'DeepSeek Harness bilingual pairing records'],
@@ -238,7 +229,7 @@ function assertSupportedGit(root) {
     for (let index = 0; index < MINIMUM_GIT.length; index += 1) {
         if (actual[index] > MINIMUM_GIT[index]) return
         if (actual[index] < MINIMUM_GIT[index]) {
-            throw new Error(`Git 2.26 or newer is required for worktree-local hooks; found ${version}`)
+            throw new Error(`Git 2.26 or newer is required for worktree-local pairing configuration; found ${version}`)
         }
     }
 }
@@ -347,13 +338,13 @@ function lockOwnerIsAlive(owner) {
 
 function manualLockRecoveryError(lockPath, condition) {
     return new Error(
-        `${condition} Lefthook installer lock ${JSON.stringify(lockPath)}. `
-        + 'Confirm no Lefthook installer is running, remove it manually, and retry.',
+        `${condition} translation-pairing installer lock ${JSON.stringify(lockPath)}. `
+        + 'Confirm no translation-pairing installer is running, remove it manually, and retry.',
     )
 }
 
 function lockOwnershipChangedError(lockPath) {
-    return new Error(`Lefthook installer lock ownership changed for ${lockPath}; refusing to remove it`)
+    return new Error(`translation-pairing installer lock ownership changed for ${lockPath}; refusing to remove it`)
 }
 
 function releaseInstallLock(lockPath, ownedRecord, ownedStat) {
@@ -389,7 +380,7 @@ async function acquireInstallLock(commonDirectory) {
             let ownedStat
             try {
                 ownedStat = fstatSync(lockHandle)
-                const writeDelay = Number(process.env.DSH_TEST_LEFTHOOK_LOCK_WRITE_DELAY_MS ?? 0)
+                const writeDelay = Number(process.env.DSH_TEST_TRANSLATION_PAIRING_LOCK_WRITE_DELAY_MS ?? 0)
                 if (writeDelay > 0) {
                     await new Promise(resolveWait => setTimeout(resolveWait, writeDelay))
                 }
@@ -449,117 +440,11 @@ async function acquireInstallLock(commonDirectory) {
             initializingLock = undefined
             if (!lockOwnerIsAlive(owner)) throw manualLockRecoveryError(lockPath, 'stale')
             if (Date.now() >= deadline) {
-                throw new Error(`timed out waiting for Lefthook installer lock ${lockPath}`)
+                throw new Error(`timed out waiting for translation-pairing installer lock ${lockPath}`)
             }
             await new Promise(resolveWait => setTimeout(resolveWait, INSTALL_LOCK_POLL_MS))
         }
     }
-}
-
-function ownershipMarkerContent(hooksPath) {
-    return `${JSON.stringify({
-        version: OWNERSHIP_MARKER_VERSION,
-        owner: OWNERSHIP_MARKER_OWNER,
-        hooksPath,
-    })}\n`
-}
-
-function parseOwnershipMarker(content) {
-    let parsed
-    try {
-        parsed = JSON.parse(content)
-    } catch {
-        return undefined
-    }
-    if (
-        typeof parsed !== 'object'
-        || parsed === null
-        || parsed.version !== OWNERSHIP_MARKER_VERSION
-        || parsed.owner !== OWNERSHIP_MARKER_OWNER
-        || typeof parsed.hooksPath !== 'string'
-        || !isAbsolute(parsed.hooksPath)
-    ) {
-        return undefined
-    }
-    return { hooksPath: parsed.hooksPath }
-}
-
-function inspectOwnedHooksDirectory(hooksPath) {
-    const markerPath = join(hooksPath, OWNERSHIP_MARKER)
-    if (!existsSync(hooksPath)) return undefined
-    const hooksStat = lstatSync(hooksPath)
-    if (!hooksStat.isDirectory() || hooksStat.isSymbolicLink()) {
-        throw new Error(`refusing to use non-directory or symlinked hooks path ${hooksPath}`)
-    }
-    if (!existsSync(markerPath)) {
-        throw new Error(`refusing to overwrite unowned hooks directory ${hooksPath}`)
-    }
-    const markerStat = lstatSync(markerPath)
-    const marker = markerStat.isFile() && !markerStat.isSymbolicLink() && markerStat.nlink === 1
-        ? parseOwnershipMarker(readFileSync(markerPath, 'utf8'))
-        : undefined
-    if (marker === undefined) {
-        throw new Error(`refusing to overwrite hooks directory with an invalid ownership marker: ${hooksPath}`)
-    }
-    for (const name of readdirSync(hooksPath)) {
-        if (name === OWNERSHIP_MARKER) continue
-        const entryPath = join(hooksPath, name)
-        const entryStat = lstatSync(entryPath)
-        if (!entryStat.isFile() || entryStat.isSymbolicLink() || entryStat.nlink !== 1) {
-            throw new Error(
-                `refusing to overwrite non-regular or multiply linked hook entry ${JSON.stringify(entryPath)}`,
-            )
-        }
-    }
-    return { markerPath, ...marker }
-}
-
-function isRegisteredOwnedHooksPath(commonDirectory, hooksPath) {
-    const normalizedHooksPath = normalizedPath(hooksPath)
-    const isRegistered = registeredWorktreeConfigPaths(commonDirectory).some(
-        configPath => normalizedPath(join(dirname(configPath), HOOKS_DIRECTORY)) === normalizedHooksPath,
-    )
-    if (!isRegistered) return false
-    return inspectOwnedHooksDirectory(hooksPath)?.hooksPath === hooksPath
-}
-
-function ensureOwnedHooksDirectory(hooksPath) {
-    const inspected = inspectOwnedHooksDirectory(hooksPath)
-    if (inspected !== undefined) return inspected
-    mkdirSync(hooksPath, { mode: 0o700 })
-    const markerPath = join(hooksPath, OWNERSHIP_MARKER)
-    writeFileSync(markerPath, ownershipMarkerContent(hooksPath), { flag: 'wx', mode: 0o600 })
-    return { markerPath, hooksPath }
-}
-
-function updateOwnershipMarker(markerPath, hooksPath) {
-    writeFileSync(markerPath, ownershipMarkerContent(hooksPath), { mode: 0o600 })
-}
-
-function environmentWithoutCommandGitConfig() {
-    const env = { ...process.env }
-    for (const key of Object.keys(env)) {
-        const normalized = key.toUpperCase()
-        if (
-            normalized === 'GIT_CONFIG_PARAMETERS'
-            || normalized === 'GIT_CONFIG_COUNT'
-            || /^GIT_CONFIG_(?:KEY|VALUE)_\d+$/.test(normalized)
-        ) {
-            delete env[key]
-        }
-    }
-    return env
-}
-
-function runLefthook(root, lefthook) {
-    const args = ['install', '--force']
-    const env = environmentWithoutCommandGitConfig()
-    // Node refuses to spawn Windows `.cmd` shims directly; the quoted path is
-    // re-parsed by cmd.exe, while POSIX can execute its extensionless shim.
-    const result = process.platform === 'win32'
-        ? spawnSync(`"${lefthook}"`, args, { cwd: root, env, stdio: 'inherit', shell: true })
-        : spawnSync(lefthook, args, { cwd: root, env, stdio: 'inherit' })
-    if (result.status !== 0) throw commandFailure(lefthook, args, result)
 }
 
 function configSource(entry) {
@@ -580,32 +465,6 @@ function configOriginPath(origin, root) {
 function originIsFile(origin, root, configPath) {
     const originPath = configOriginPath(origin, root)
     return originPath !== undefined && normalizedPath(originPath) === normalizedPath(configPath)
-}
-
-function refuseInheritedHooksPath(entry) {
-    throw new Error(
-        `refusing to replace user-owned core.hooksPath (${configSource(entry)}). `
-        + `Chain those hooks through lefthook.yml, or, if this inherited path may remain active only in other worktrees, `
-        + `rerun with ${ALLOW_HOOKS_PATH_OVERRIDE}=1`,
-    )
-}
-
-function refuseScopedHooksPath(entry) {
-    if (entry.scope === 'command') {
-        throw new Error(
-            `refusing to replace command-scoped core.hooksPath (${configSource(entry)}); `
-            + `${ALLOW_HOOKS_PATH_OVERRIDE} cannot override transient command configuration`,
-        )
-    }
-    if (entry.scope === 'worktree') {
-        throw new Error(
-            `refusing to replace worktree-scoped core.hooksPath (${configSource(entry)}); `
-            + 'a worktree-specific custom path must be integrated or removed explicitly',
-        )
-    }
-    throw new Error(
-        `refusing to replace core.hooksPath from unsupported ${entry.scope} scope (${configSource(entry)})`,
-    )
 }
 
 function installPairingMergeDriver(root, worktreeConfigPath) {
@@ -690,13 +549,9 @@ function probePairingMergeDriver(root) {
 
 async function main() {
     if (process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true') return
-    if (typeof lefthookPackage.bin?.lefthook !== 'string') return
     const probe = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' })
     if (probe.status !== 0) return
     const root = stripGitLineTerminator(probe.stdout)
-    const isWindows = process.platform === 'win32'
-    const lefthook = join(root, 'node_modules', '.bin', isWindows ? 'lefthook.cmd' : 'lefthook')
-    if (!existsSync(lefthook)) return
 
     assertSupportedGit(root)
     const gitDirectory = stripGitLineTerminator(git(['rev-parse', '--absolute-git-dir'], root).stdout)
@@ -704,7 +559,6 @@ async function main() {
     const commonDirectory = isAbsolute(commonOutput) ? commonOutput : resolve(root, commonOutput)
     const commonConfigPath = join(commonDirectory, 'config')
     const worktreeConfigPath = join(gitDirectory, 'config.worktree')
-    const hooksPath = join(gitDirectory, HOOKS_DIRECTORY)
     const releaseLock = await acquireInstallLock(commonDirectory)
     let installationError
 
@@ -716,95 +570,15 @@ async function main() {
             commonConfigPath,
             worktreeConfigPath,
         )
-        const worktreeEntries = includedFileConfigEntries(root, worktreeConfigPath, 'core.hooksPath')
-        const includedWorktreeEntry = worktreeEntries.find(
-            entry => !originIsFile(entry.origin, root, worktreeConfigPath),
-        )
-        if (includedWorktreeEntry !== undefined) {
-            refuseScopedHooksPath({ ...includedWorktreeEntry, scope: 'worktree' })
-        }
-        const worktreePath = assertSingle(
-            worktreeEntries.map(entry => entry.value),
-            'worktree core.hooksPath',
-        )
-        let ownedHooksDirectory
-        let copiedWorktreePathIsOwned = false
-        if (worktreePath !== undefined && worktreePath !== hooksPath) {
-            ownedHooksDirectory = inspectOwnedHooksDirectory(hooksPath)
-            const worktreePathIsRelocated = ownedHooksDirectory?.hooksPath === worktreePath
-            copiedWorktreePathIsOwned = !worktreePathIsRelocated
-                && isRegisteredOwnedHooksPath(commonDirectory, worktreePath)
-            if (!worktreePathIsRelocated && !copiedWorktreePathIsOwned) {
-                refuseScopedHooksPath({ origin: `file:${worktreeConfigPath}`, scope: 'worktree', value: worktreePath })
-            }
-        }
-        const directWorktreePathIsOwned = worktreePath !== undefined
-            && (
-                worktreePath === hooksPath
-                || ownedHooksDirectory?.hooksPath === worktreePath
-                || copiedWorktreePathIsOwned
-            )
-        const effectiveEntry = effectiveConfigEntry(root, 'core.hooksPath')
-        if (effectiveEntry !== undefined) {
-            const effectivePathIsOwned = effectiveEntry.scope === 'worktree'
-                && effectiveEntry.value === worktreePath
-                && directWorktreePathIsOwned
-                && originIsFile(effectiveEntry.origin, root, worktreeConfigPath)
-            if (!effectivePathIsOwned) {
-                if (effectiveEntry.scope === 'command' || effectiveEntry.scope === 'worktree') {
-                    refuseScopedHooksPath(effectiveEntry)
-                }
-                if (!['system', 'global', 'local'].includes(effectiveEntry.scope)) {
-                    refuseScopedHooksPath(effectiveEntry)
-                }
-                if (process.env[ALLOW_HOOKS_PATH_OVERRIDE] !== '1') {
-                    refuseInheritedHooksPath(effectiveEntry)
-                }
-            }
-        }
         const migration = planWorktreeConfigMigration(root, commonConfigPath)
-        ownedHooksDirectory = ensureOwnedHooksDirectory(hooksPath)
-        if (
-            worktreePath !== undefined
-            && worktreePath !== hooksPath
-            && ownedHooksDirectory.hooksPath !== worktreePath
-            && !copiedWorktreePathIsOwned
-        ) {
-            throw new Error(`hooks directory ownership changed while relocating ${JSON.stringify(worktreePath)}`)
-        }
         applyWorktreeConfigMigration(root, commonConfigPath, migration)
 
-        let pathChanged = false
         let rollbackPairingMergeDriver = () => {}
         try {
             probePairingMergeDriver(root)
             rollbackPairingMergeDriver = installPairingMergeDriver(root, worktreeConfigPath)
-            git(['config', '--worktree', 'core.hooksPath', hooksPath], root)
-            pathChanged = worktreePath !== hooksPath
-            const installedEntry = effectiveConfigEntry(root, 'core.hooksPath')
-            if (
-                installedEntry === undefined
-                || installedEntry.scope !== 'worktree'
-                || installedEntry.value !== hooksPath
-                || !originIsFile(installedEntry.origin, root, worktreeConfigPath)
-            ) {
-                throw new Error('new worktree-local core.hooksPath did not become the effective direct worktree value')
-            }
-            runLefthook(root, lefthook)
-            updateOwnershipMarker(ownedHooksDirectory.markerPath, hooksPath)
         } catch (error) {
             const rollbackErrors = []
-            if (pathChanged) {
-                try {
-                    if (worktreePath === undefined) {
-                        git(['config', '--worktree', '--unset-all', 'core.hooksPath'], root)
-                    } else {
-                        git(['config', '--worktree', 'core.hooksPath', worktreePath], root)
-                    }
-                } catch (rollbackError) {
-                    rollbackErrors.push(rollbackError)
-                }
-            }
             try {
                 rollbackPairingMergeDriver()
             } catch (rollbackError) {
@@ -813,8 +587,8 @@ async function main() {
             if (rollbackErrors.length > 0) {
                 throw new AggregateError(
                     [error, ...rollbackErrors],
-                    `Lefthook installation failed: ${String(error)}; `
-                    + `worktree integration rollback also failed: ${rollbackErrors.map(String).join('; ')}`,
+                    `Translation pairing installation failed: ${String(error)}; `
+                    + `rollback also failed: ${rollbackErrors.map(String).join('; ')}`,
                 )
             }
             throw error
@@ -829,7 +603,7 @@ async function main() {
             if (installationError !== undefined) {
                 throw new AggregateError(
                     [installationError, releaseError],
-                    `Lefthook installation failed: ${String(installationError)}; installer lock release also failed: ${String(releaseError)}`,
+                    `Translation pairing installation failed: ${String(installationError)}; installer lock release also failed: ${String(releaseError)}`,
                 )
             }
             throw releaseError
@@ -840,6 +614,6 @@ async function main() {
 try {
     await main()
 } catch (error) {
-    console.error(`[install-lefthook] ${error instanceof Error ? error.message : String(error)}`)
+    console.error(`[install-translation-pairing] ${error instanceof Error ? error.message : String(error)}`)
     process.exitCode = 1
 }

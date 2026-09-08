@@ -55,7 +55,7 @@ npm start
 pnpm --config.verify-deps-before-run=false start
 ```
 
-The pnpm option disables the dependency check for this launch. In pnpm 11.7.0, a production-mode workspace state can make the check run `install --production`, removing development dependencies such as Electron and `lefthook`.
+The pnpm option disables the dependency check for this launch. In pnpm 11.7.0, a production-mode workspace state can make the check run `install --production`, removing development dependencies such as Electron.
 
 If those dependencies have been removed, restore them from the repository root before launching:
 

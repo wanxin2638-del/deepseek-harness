@@ -9,7 +9,7 @@ Status: implemented
 GUI 拆分引入了第二个聚合 program（`tsconfig.client.json`，见[已归档的分层 RFC](../../archived/architecture/2026-07-19-gui-layering-and-rpc-protocol.md)），根 `tsconfig.json` 则继续兼任宿主侧聚合，`tsconfig.build.json` 还是第三份手工维护的全量 emit 图。三处账本并行，造成四个具体的不对称：
 
 - 类型检查与构建的 references 列表逐渐脱节（`packages/goal/command-goal` 在类型检查图里，构建图里却没有）。
-- lefthook 的 pre-push 钩子只运行 `tsc -b tsconfig.json`，客户端侧的类型破坏因此通过本地检查点，直到 CI 才暴露。
+- 单独运行 `tsc -b tsconfig.json` 不会覆盖两个 aggregate program 所需的 Host 到 Client 生成声明。
 - tsserver 只发现名为 `tsconfig.json` 的配置，客户端测试文件不在任何可发现的配置链上，回落到推断项目（inferred project），既没有 paths，lib/jsx 也不对。
 - 各 vitest 配置指向三个不同的解析来源（`tsconfig.vitest.json`、根配置，外加一处手写别名）。
 
@@ -27,7 +27,7 @@ GUI 拆分引入了第二个聚合 program（`tsconfig.client.json`，见[已归
 
 整个方案立足的原则：**cordis `Context` 的声明合并冲突只存在于同一个 `ts.Program` 内部，从不发生在模块解析中。** solution 文件不构成 program，因此从一个根文件同时引用两个聚合不会让两侧的声明合并相撞；vite-tsconfig-paths 只读取 `paths` 与 `include`、丢弃全部类型信息，因此一个门面可以横跨两侧。唯一会爆炸的做法是把两侧压平进同一个 program，由此推出两条派生纪律：`tsconfig.base.json` 永远不得添加 `include`/`files`（否则会泄漏进每个继承它的包，并收窄门面范围）；每个全仓级 `ts.Program` 消费方（`scripts/ts-project.ts`、doc-typecheck 独立模式）都显式以 `tsconfig.host.json` 或 `tsconfig.client.json` 为种子，绝不使用根 solution。基于 program 的生成器与语义门禁有意只留在宿主侧；客户端侧只有在真实需求出现时才引入基于 program 的门禁。
 
-根 `tsconfig.json` 仍是显式执行完整 Project Reference 图的 solution 入口，lefthook pre-push 通过 `tsc -b tsconfig.json --pretty false` 增量覆盖两侧。仓库的 `build` 与 `typecheck` 命令因 Client 依赖 Host tsdown 生成的 Remote 约定而按 Host、Client 顺序运行，具体编排由 [API Remotes 构建 Note](2026-08-08-api-remotes-generated-contract-build.zh.md)负责。`tsconfig.build.json` 与 `tsconfig.vitest.json` 已删除；所有 vitest 配置都把 vite-tsconfig-paths 指向 `tsconfig.base.json`。
+根 `tsconfig.json` 仍是显式执行完整 Project Reference 图的 solution 入口。仓库的 `build` 与 `typecheck` 命令因 Client 依赖 Host tsdown 生成的 Remote 约定而按 Host、Client 顺序运行，具体编排由 [API Remotes 构建 Note](2026-08-08-api-remotes-generated-contract-build.zh.md)负责。`tsconfig.build.json` 与 `tsconfig.vitest.json` 已删除；所有 vitest 配置都把 vite-tsconfig-paths 指向 `tsconfig.base.json`。
 
 solution 根文件刻意 `extends` base：`scripts/` 没有更近的 tsconfig，tsx（get-tsconfig）通过根文件解析其 workspace 导入。`extends` 把 `paths` 映射带回根文件，`files: []` 则让它始终不构成 program。scripts 与 website 的类型检查仍由 Host aggregate 纳入。
 

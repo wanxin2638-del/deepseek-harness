@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-08-09-oxlint-only-fix-workflow.md
-2026-08-09-oxlint-only-fix-workflow.md: bc38812db101499d980c38cb6c1dc5cba32e5cd6
-2026-08-09-oxlint-only-fix-workflow.zh.md: 350fe92bc1c028eabf1cd4e3791d92e9d0c6a949
+2026-08-09-oxlint-only-fix-workflow.md: 2bfdbcdb86704975cf314bda2a22b1174220a36e
+2026-08-09-oxlint-only-fix-workflow.zh.md: 50449312fbc85075010973ef6d80e26b845b992b
