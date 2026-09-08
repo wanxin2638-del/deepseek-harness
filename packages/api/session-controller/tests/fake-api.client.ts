@@ -12,6 +12,7 @@ import type {
   SessionAssistantStreamBaseline,
   SessionControlBaseline,
   SessionControlFrame,
+  SessionContextValue,
   SessionFollowFrame,
   SessionFollowRequest,
   SessionPage,
@@ -141,6 +142,11 @@ export class FakeApiClient {
   onHistory: (payload: { sessionId: SessionId; throughSeq?: number; beforeSeq?: number; maxMessages?: number })
   => Promise<RemoteResult<SessionPage & { readonly projections?: SessionProjectionBaseline }>> =
     () => Promise.resolve(ok({ records: [], hasMore: false }))
+  onContext: (_payload: unknown) => Promise<RemoteResult<SessionContextValue>> = () => Promise.resolve(ok({
+    asOfSeq: -1,
+    header: null,
+    messages: [],
+  }))
 
   onPrompt: (payload: unknown) => Promise<RemoteResult<{ accepted: true }>> = () => Promise.resolve(ok({ accepted: true as const }))
   onAttachment: (payload: unknown) => Promise<RemoteResult<{ attachment: { attachmentId: never; mediaType: 'image/png'; bytes: number; width: number; height: number }; data: string }>> =
@@ -237,6 +243,7 @@ export class FakeApiClient {
           payload,
           this.onOpenWorkspacePath(payload),
         ),
+        context: payload => this.record('session.context', payload, this.onContext(payload)),
         page: request => this.page(request),
         follow: (request, signal) => this.openFollow(request, signal),
         control: signal => this.openControl(signal),

@@ -96,7 +96,7 @@ function createWindow(): void {
     event.preventDefault()
     void shell.openExternal(url)
   })
-  win.webContents.openDevTools()
+  // win.webContents.openDevTools()
 }
 
 /**

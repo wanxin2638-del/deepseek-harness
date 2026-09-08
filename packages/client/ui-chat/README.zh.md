@@ -16,6 +16,7 @@ Conversation 组装的浏览器 Chat target。本包注册 Chat event definition
 - [轮次 token 用量](#turn-token-usage)
 - [轮次过程折叠](#turn-process-folding)
 - [滚动归属](#scroll-ownership)
+- [上下文视图](#context-view)
 - [模型体验](#model-experience)
 - [已知限制与暂缓事项](#known-limitations-and-deferred-work)
 - [开发备注](#dev-note)
@@ -47,6 +48,13 @@ Chat 会为每个非空的初始或恢复请求、显式消息序列起点或真
 ## 滚动归属
 
 Chat 会在历史前插与 renderer 重新挂载时恢复语义锚点。读者跟随底部时，`ResizeObserver` 追随新的底部，并且无需读取行几何就选中最后一个已加载 Turn；读者离开底部后，高度变化会保持顶部位置，再由阅读线几何选择活跃 Turn。轮次导航预览位于 Markdown 代码块粘性头栏上方，而导航外框始终处于 composer 上方的 transcript 区域内（[已加载 Turn 导航](../../../.agents/notes/implemented/feature/2026-08-25-loaded-turn-chat-navigation.zh.md)）。
+
+-----
+
+<a id="context-view"></a>
+## 上下文视图
+
+Chat 在对话与轨迹视图旁注册一个 `上下文` 标签。它读取 `SessionFace.readContext()`，展示 Host 返回的精确 `asOfSeq`、已记录的 request header 与 canonical message history。Session event window 版本变化后，视图会重新读取；较早的请求晚返回时会保留更新的结果，并使用共享 JSON tree 的复制操作。该视图只用于检查模型输入，不修改 Session，也不会在 Client 再组装一份历史。
 
 -----
 

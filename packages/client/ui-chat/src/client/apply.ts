@@ -22,6 +22,7 @@ import type { ChatSnapshot } from './contract/snapshot.ts'
 import { EMPTY_CHAT_SNAPSHOT } from './contract/snapshot.ts'
 import { ApprovalCommand } from './chat/ApprovalCommand.tsx'
 import { ChatView } from './chat/ChatView.tsx'
+import { ContextView, type ContextViewInjected } from './context/ContextView.tsx'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { StatsLine } from './chat/StatsLine.tsx'
 import { registerConversationNodes } from './conversation-nodes/register.ts'
@@ -151,6 +152,21 @@ export function apply(ctx: Context): void {
     }, ChatView)
     return disposeView
   })
+
+  ctx.slots.inject('conversation.view', () => ctx.slots.register({
+    name: 'conversation.view',
+    id: 'context',
+    order: 20,
+    locale: NS,
+    label: () => t('view.context'),
+    inject: (sessionId: SessionId): ContextViewInjected => {
+      const binding = ctx.sessions.binding(sessionId)
+      if (binding === undefined) {
+        throw new Error(`ui-chat: context view session "${sessionId}" is unavailable`)
+      }
+      return { session: binding.session, eventSource: binding.eventSource }
+    },
+  }, ContextView))
 
   ctx.slots.inject('conversation.composer.dock', () =>
     ctx.slots.register({

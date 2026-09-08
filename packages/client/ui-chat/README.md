@@ -16,6 +16,7 @@ The browser Chat target for Conversation assembly. It registers Chat event defin
 - [Turn token usage](#turn-token-usage)
 - [Turn Process Folding](#turn-process-folding)
 - [Scroll ownership](#scroll-ownership)
+- [Context view](#context-view)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
 - [Dev Note](#dev-note)
@@ -47,6 +48,13 @@ Settings → General exposes a persisted `Normal` / `Compact` conversation-displ
 ## Scroll ownership
 
 Chat restores semantic anchors across history prepend and renderer remounts. While the reader is pinned to the floor, `ResizeObserver` follows the new floor and selects the latest loaded Turn without reading row geometry. Once the reader moves away, flow-height changes preserve the top position and the reading-line geometry selects the active Turn. Turn-rail previews paint above sticky Markdown code-block banners, while the rail frame remains inside the transcript band above the composer ([loaded-Turn navigation](../../../.agents/notes/implemented/feature/2026-08-25-loaded-turn-chat-navigation.md)).
+
+-----
+
+<a id="context-view"></a>
+## Context view
+
+Chat registers a `Context` tab beside the conversation and trajectory views. It reads `SessionFace.readContext()` and displays the exact `asOfSeq`, logged request header, and canonical message history returned by the Host. The view refreshes after a Session event-window revision, keeps a newer result when an older request settles late, and uses the shared JSON tree's copy actions. It presents model input for inspection only and does not mutate the Session or assemble a second client-side history.
 
 -----
 

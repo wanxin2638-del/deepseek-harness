@@ -12,7 +12,9 @@ import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import type { PromptContentPart, QueueAction, SessionRequestId } from '../../types.ts'
+import type {
+  PromptContentPart, QueueAction, SessionContextValue, SessionRequestId,
+} from '../../types.ts'
 import type { PendingSubmissionAttachment, SessionSnapshot } from './snapshot.ts'
 
 /**
@@ -110,6 +112,12 @@ export interface ISession {
    * @returns acceptance, or the business error.
    */
   cancel(): Promise<RemoteResult<{ accepted: true }>>
+  /**
+   * Read the complete model context reconstructed from the current Session log.
+   * @param signal - optional cancellation for the Host read.
+   * @returns the logged request header and canonical derived messages.
+   */
+  readContext(signal?: AbortSignal): Promise<RemoteResult<SessionContextValue>>
   /**
    * Rename this session (explicit user title; pins it against automatic
    * regeneration).

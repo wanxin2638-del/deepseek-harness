@@ -438,6 +438,22 @@ export interface SessionFollowRequest {
   readonly assistantStream?: true
 }
 
+/** One read-only request for the current model context of a Session address. */
+export interface SessionContextRequest {
+  /** Ordinary Session or directly addressed subagent whose context is read. */
+  readonly address: SessionAddress
+}
+
+/** Complete model context reconstructed from one exact Session log cut. */
+export interface SessionContextValue {
+  /** Last durable event sequence represented by `header` and `messages`. */
+  readonly asOfSeq: number
+  /** Latest logged request header, or null before the first model request. */
+  readonly header: JsonValue | null
+  /** Canonical model-visible message history at `asOfSeq`. */
+  readonly messages: readonly JsonValue[]
+}
+
 /** One active assistant attempt in a reconnect opening snapshot. */
 export interface SessionAssistantStreamAttempt {
   readonly attemptId: LlmAttemptId

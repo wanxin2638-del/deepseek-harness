@@ -112,7 +112,11 @@ describe('SessionController facade', () => {
     expect(failure).toHaveBeenCalledWith(sessionId, expect.stringContaining('fixture failure'))
     expect(activity).toHaveBeenCalledWith(sessionId, expect.any(Number))
     session.append('request/header', {
-      header: { config: { provider: 'fixture', model: 'fixture-model' } },
+      header: {
+        config: { provider: 'fixture', model: 'fixture-model' },
+        system: 'system prompt',
+        tools: [{ name: 'fixture', description: 'fixture tool', parameters: {} }],
+      },
       reason: 'initial',
     })
     expect(consumeSelection).toHaveBeenCalledWith(
@@ -126,6 +130,20 @@ describe('SessionController facade', () => {
       reason: 'initial',
     })
     expect(consumeSelection).toHaveBeenCalledTimes(1)
+
+    await expect(controller.context({
+      address: { kind: 'session', sessionId },
+    }, new AbortController().signal)).resolves.toMatchObject({
+      asOfSeq: session.seq - 1,
+      header: {
+        system: 'system prompt',
+        tools: [{ name: 'fixture' }],
+      },
+      messages: [
+        expect.objectContaining({ content: [{ type: 'text', text: 'hello' }] }),
+        expect.objectContaining({ content: [{ type: 'text', text: 'browser prompt' }] }),
+      ],
+    })
 
     const abort = new AbortController()
     const iterator = controller.follow({

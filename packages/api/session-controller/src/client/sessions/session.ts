@@ -17,6 +17,7 @@ import type {
   SessionProjectionBaseline,
   SessionQueuedItem,
   SessionRequestId,
+  SessionContextValue,
 } from '../../types.ts'
 import type {
   BeginSubmissionInput, PendingSubmissionRetirement, SessionFace, SubmissionHandle,
@@ -342,6 +343,15 @@ export class Session implements SessionFace {
       this.notifier.markDirty()
     }
     return result
+  }
+
+  /**
+   * Read the complete model context for this Session address.
+   * @param signal - optional cancellation for the Host read.
+   * @returns the logged request header and canonical derived messages.
+   */
+  readContext(signal?: AbortSignal): Promise<RemoteResult<SessionContextValue>> {
+    return this.remote.session.context({ address: this.sessionAddress() }, signal)
   }
 
   /**

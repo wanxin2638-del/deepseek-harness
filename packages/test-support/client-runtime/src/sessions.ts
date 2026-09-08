@@ -121,6 +121,14 @@ export class FixtureSession implements SessionFace {
   }
 
   /**
+   * Fail-loud stub; supply `readContext` on the fixture's session face to exercise it.
+   * @returns never — always throws.
+   */
+  readContext(): never {
+    throw new Error(`test session "${this.sessionId}": readContext is not stubbed — supply it on the fixture's session face`)
+  }
+
+  /**
    * Fail-loud stub; supply `updateQueue` on the fixture's session face to exercise it.
    * @returns never — always throws.
    */

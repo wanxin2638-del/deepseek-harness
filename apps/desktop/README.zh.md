@@ -39,7 +39,9 @@ pnpm --filter @deepseek-ai/dsh-desktop assemble
 
 # 4. Launch the installed Electron app.
 cd apps\desktop
+pnpm add -D lefthook -w
 npm start
+
 ```
 
 第 2 步仅在 `apps\desktop\node_modules\electron\dist\electron.exe` 不存在的机器上需要；代理地址是你的本地 HTTP 代理，不是硬性要求。

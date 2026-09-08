@@ -45,6 +45,22 @@ function histResponse(events: SessionEvent[], hasMore = false) {
 }
 
 describe('Session open', () => {
+  it('reads the Host-reconstructed model context', async () => {
+    const { api, session } = makeSession()
+    api.onContext = _payload => Promise.resolve(ok({
+      asOfSeq: 3,
+      header: { config: { provider: 'fixture', model: 'fixture-model' } },
+      messages: [],
+    }))
+
+    await expect(session.readContext()).resolves.toEqual(ok({
+      asOfSeq: 3,
+      header: { config: { provider: 'fixture', model: 'fixture-model' } },
+      messages: [],
+    }))
+    expect(api.callsOf('session.context')).toEqual([{ address: { kind: 'session', sessionId: SID } }])
+  })
+
   it('keeps a bare Session blank until an authoritative lifecycle signal arrives', () => {
     const { session } = makeSession()
     expect(session.getSnapshot()).toMatchObject({ blank: true, promptAttempted: false, running: false })

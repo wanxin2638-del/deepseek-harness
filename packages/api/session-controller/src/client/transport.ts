@@ -2,6 +2,7 @@
 
 import type {} from '@deepseek-ai/dsh-api-session-controller/remote'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
+import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import {
   RemoteJournalStream,
   RemoteSnapshotStream,
@@ -15,6 +16,8 @@ import type {
   SessionAssistantStreamBaseline,
   SessionAssistantStreamFrame,
   SessionControlFrame,
+  SessionContextRequest,
+  SessionContextValue,
   SessionHistoryRecord,
   SessionPage,
   SessionPageRequest,
@@ -36,8 +39,13 @@ export {
 /** Pagination fields bound to an already-addressed Session journal. */
 export type ClientSessionPageRequest = Omit<SessionPageRequest, 'address' | 'throughSeq'>
 
-/** Complete generated `ctx.remote.session` namespace. */
-export type SessionRemote = ClientRemote['session']
+/** Client-generated Session namespace plus the context method owned by this source face. */
+export type SessionRemote = ClientRemote['session'] & {
+  context(
+    request: SessionContextRequest,
+    signal?: AbortSignal,
+  ): Promise<RemoteResult<SessionContextValue>>
+}
 
 /** Opening metadata carried only by a follow snapshot, never by loadOlder pages. */
 interface SessionJournalPage extends SessionPage {

@@ -4,6 +4,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { Deque } from '@deepseek-ai/dsh-deque'
 import type { AssistantStreamFrame } from '@deepseek-ai/dsh-agent'
 import {
+  Session,
   isAppendSurfaceEvent,
   SessionLogOffset,
   SessionSeq,
@@ -22,6 +23,7 @@ import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type {
   SessionAddress,
   SessionAssistantStreamFrame,
+  SessionContextValue,
   SessionEventEntry,
   SessionFollowRequest,
   SessionFollowFrame,
@@ -107,6 +109,34 @@ export class SessionHistoryController {
     return {
       records,
       hasMore: page.hasMore,
+    }
+  }
+
+  /**
+   * Reconstruct the complete model context at one exact Session cut without
+   * activating an Agent.
+   * @param address - ordinary Session or directly addressed subagent.
+   * @param signal - caller cancellation for the persistence read.
+   * @returns the logged request header and canonical derived messages.
+   */
+  async context(address: SessionAddress, signal: AbortSignal): Promise<SessionContextValue> {
+    using source = await this.sourceFor(address, signal, false)
+    signal.throwIfAborted()
+    const session = Session.fromRestore(
+      addressId(address),
+      source.events,
+      source.header,
+      source.inheritedEventCount,
+    )
+    const header = session.requestHeader()
+    return {
+      asOfSeq: source.cursor,
+      header: header === undefined
+        ? null
+        : header as unknown as JsonValue,
+      // Session event payloads are validated as lossless JSON before they enter
+      // the Session, so the derived Message objects are safe on this wire face.
+      messages: session.deriveMessages() as unknown as JsonValue[],
     }
   }
 

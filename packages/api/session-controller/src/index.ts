@@ -29,6 +29,8 @@ import type {
   SessionCancelRequest,
   SessionCancelValue,
   SessionControlFrame,
+  SessionContextRequest,
+  SessionContextValue,
   SessionCreateRequest,
   SessionCreateValue,
   SessionFollowFrame,
@@ -370,6 +372,18 @@ export class SessionController extends TypertRemoteService {
   @Remote('page')
   page(request: SessionPageRequest, signal: AbortSignal): Promise<SessionPage> {
     return this.history.page(request, signal)
+  }
+
+  /**
+   * Reconstruct the complete model context for one Session without activating
+   * an Agent.
+   * @param request - ordinary Session or directly addressed subagent.
+   * @param signal - caller cancellation for the exact log read.
+   * @returns the latest logged request header and canonical derived messages.
+   */
+  @Remote('context')
+  context(request: SessionContextRequest, signal: AbortSignal): Promise<SessionContextValue> {
+    return this.history.context(request.address, signal)
   }
 
   /**

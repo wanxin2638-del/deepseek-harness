@@ -177,6 +177,26 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     expect(calls.map(e => e.data.name).sort()).toEqual(['bash', 'read', 'read'])
   }, 400_000)
 
+  it.skipIf(MODE === 'record')('renders the Host-reconstructed model context tab', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-context'))
+    await ensureSeedOpen(page)
+    const contextTab = page.getByRole('tab', { name: 'Context', exact: true })
+    await contextTab.waitFor({ timeout: 15_000 })
+    expect(await contextTab.count()).toBe(1)
+    await contextTab.click()
+    const view = page.locator('[data-context-view]')
+    await view.waitFor({ timeout: 15_000 })
+    await expect.poll(async () => await view.textContent(), { timeout: 15_000 }).toContain('asOfSeq')
+    const text = await view.textContent()
+    expect(text).toContain('Current model context')
+    expect(text).toContain('messages')
+    expect({
+      pageErrors: tripwire.pageErrors,
+      slotErrors,
+      warnings: tripwire.warnings,
+    }).toEqual({ pageErrors: [], slotErrors: [], warnings: [] })
+  }, 60_000)
+
   it.skipIf(MODE === 'record')('finds an unopened seeded session by message content and opens it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-search'))
     // The API baselines can settle before React commits their projection. The
