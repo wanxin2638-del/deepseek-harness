@@ -10,14 +10,14 @@ English | [中文](desktop-integration.zh.md)
 
 ## 1. Background and goals
 
-Once Plan 1 lands, the desktop side is functionally equivalent to "dsh web with a built-in browser". This plan adds the desktop-only value: **task-state changes → user-visible reminders**, including Windows notifications (toast) and the taskbar flash. The trigger sources are not limited to approvals (today only the in-browser composer takes over, see §4 fact G2), but a complete subset of the product event surface.
+Once Plan 1 lands, the desktop side is functionally equivalent to "dsh web with a built-in browser". This plan adds the desktop-only value: **task-state changes → user-visible reminders**, including Windows notifications (toast) and the taskbar flash. The trigger sources cover user interactions as well as task outcomes (today the in-browser composer takes over the user-interaction cases, see §4 fact G2), forming a complete subset of the product event surface.
 
 Target capabilities (ordered by value):
 
 | # | Capability | Trigger source | User value |
 |---|---|---|---|
 | C1 | Task-completion reminder | Session running→idle edge (same-source signal as the sidebar "done" mark) | Know when a run finishes even while the window is unfocused |
-| C2 | Pending-approval flash | `approval/request` (currently **no** OS reminder at all) | Not missed before allow/deny |
+| C2 | Pending-user-interaction flash | `uiSession.pendingInteractions` (currently **no** OS reminder at all) | Not missed before the user responds |
 | C3 | Failure/abandon reminder | `assistant/attempt` terminal failure/cancel | Do not have to watch for the result |
 | C4 | Background task/workflow/subagent completion | jobs mirror, workflow, subagent delegation | Long-task completion notification |
 | C5 | Backend anomaly | Shell-level: unexpected child-process exit/restart | The user knows when the process crashes |
@@ -41,7 +41,7 @@ The trigger-source set is extensible: future webhook delivery, schedule, goal mi
 ┌─ web profile Cordis tree (plugin layer, product behavior) ──────────────┐
 │  dsh-desktop-integration/client (dsh.client row)                        │
 │  · subscribes ctx.sessions (C1: completed edge + title projection)        │
-│  · subscribes the approval client channel (C2)                            │
+│  · subscribes the pending-interaction registry (C2)                       │
 │  · subscribes SessionEventStream's assistant/attempt (C3)                 │
 │  · subscribes the jobs mirror (C4)                                        │
 │  · policy: source switches / unfocused-only / min run duration / dedup    │
@@ -87,10 +87,10 @@ interface DesktopBridge {
 - **Subscription surface**: `service.ts:191` `readonly list: SnapshotStore<SessionListState>`; `projectList()` (`:577-647`) writes `completed` into the store rows (`:589`), `jobsBySession` in the same snapshot (`:645`); `service.ts:263` `rootCtx.reflect.provide('sessions', this, undefined)` → any client plugin can `ctx.sessions.list.subscribe()` + `getSnapshot()` (SnapshotStore semantics: `packages/client/store/src/index.ts:26-38,103-136`; the list store is a sync flush, `set` replaces the whole value).
 - **C1 subscribes to the sessions list store directly and watches the `completed` false→true edge, no recompute needed**; the title uses the row's `title` (durable projection, `service.ts:587-596`).
 
-**G2 · The approval observation point is the "pending interaction" registry, not the approval/request waterfall** — `packages/client/ui-approval` + `packages/client/ui-session`
-- `PendingApproval` (`ui-approval/src/client/contract/slots.ts:69-160`): kind literal `'approval'` (`:71,95`), key `approval:<n>`, `result` settles at answer/delegate/abort (`:122-150`); `answerApproval` (`ui-approval/src/client/index.ts:35-68`) removes the pending item in finally (`:64-67`).
-- **Observation channel**: `ctx.uiSession.pendingInteractions` (`ui-session/src/client/index.ts:225-231`) — a `HostObservable<ReadonlyMap<SessionId, PendingInteraction>>`, global read-only, notifies on publish (`:366-386`); `registerPendingInteraction` (`:304-323`) registers each domain. Does **not** inject the `approval/request` waterfall (`ui-approval/src/client/index.ts:90-92`) — avoids coupling to the ui-approval answer-listener order.
-- **C2 subscribes to pendingInteractions: a `kind === 'approval'` item appearing → `flash until-focus`; its disappearance (handled/abandoned/invalid) → clear.**
+**G2 · The user-interaction observation point is the pending-interaction registry, not any answer waterfall** — `packages/client/ui-approval` + `packages/client/ui-user-questions` + `packages/client/ui-session`
+- `PendingApproval` (`ui-approval/src/client/contract/slots.ts:69-160`) publishes kind `'approval'`; `PendingQuestion` (`ui-user-questions/src/client/contract/slots.ts:109-190`) publishes kind `'question'` or `'plan-review'`. Each publisher removes its pending item after answer, delegation, cancellation, or abort.
+- **Observation channel**: `ctx.uiSession.pendingInteractions` (`ui-session/src/client/index.ts:225-231`) — a `HostObservable<ReadonlyMap<SessionId, PendingInteraction>>`, global read-only, notifies on publish (`:366-386`); `registerPendingInteraction` (`:304-323`) registers each domain. The desktop plugin does not inject an answer waterfall, so its observation is independent of responder order.
+- **C2 subscribes to pendingInteractions: any item appearing → `flash until-focus`; its disappearance (handled/abandoned/invalid) → clear. A pending item that becomes unfocused after appearing while focused is re-evaluated on the window-state transition.**
 
 **G3 · Failures have a ready global forwarded event; no per-session stream needed** — `packages/api/session-controller/src`
 - Host side: `src/index.ts:148-150` `ctx.on('agent/error', ({agent,error}) => ctx.emit('api-session/error', agent.id, errorChain(error)))` — `agent/error` is terminal Agent failure (retry is in-loop behavior and does not trigger it); `:171` background-activation failure forwards the same way.
@@ -117,7 +117,7 @@ interface DesktopBridge {
 | D1 | Sensing-layer location | **client plugin** (`dsh.client` row), into the web profile; no fork of any official bundle, insert a row via the profile's `cordis.patch.yml` (home-layer hot reload) or an overlay bundle | Everything is a plugin; G1 |
 | D2 | Bridge is primitives-only | main carries no product semantics, only notify/flash/windowState | The shell is the host (Plan 1 §2) |
 | D3 | C1 determination signal | use the `completed` edge directly (G1); no shell polling, no recompute | G1; avoid reimplementation |
-| D4 | C2 flash semantics | `flash({kind:'until-focus'})`: **flash continues until the user handles the approval**; cleared only on window focus; C1/C3/C4 use `duration`-type flash + notification | An approval must not be missed; a completion notification is once |
+| D4 | C2 flash semantics | `flash({kind:'until-focus'})`: **flash continues until the user handles the pending interaction**; cleared only on window focus; C1/C3/C4 use `duration`-type flash + notification | A required user response must not be missed; a completion notification is once |
 | D5 | Quiet hours | plugin `Config` provides `quietHours` (configurable); during them notify returns false and no flash happens | Policy-configurable principle |
 | D6 | No-bridge degradation | `window.desktopBridge` missing → plugin no-op; the same web profile still runs in a plain browser | Both environments consistent |
 | D7 | Copy | notification title/body enter the locale dictionary via `t()` | locale-owned rule |
@@ -129,7 +129,7 @@ Common convention: depends on Plan 1's P1.3/P1.5 for a bridge-usable dev shell; 
 ### P2.0 Contract review (read-only)
 - Write path: this file only (§4 fact-table backfill).
 - Review checklist:
-  1. G2: `ui-approval`'s **exact client API** for subscribing to `approval/request` (scoped Remote form, store/channel name), confirm a client plugin can inject the same channel; confirm the "approval pending" determination state.
+  1. G2: the **exact client API** for determining pending user interactions, including approval and question carriers; confirm a client plugin can observe the shared registry without injecting an answer waterfall.
   2. G3: `assistant/attempt` event payload's terminal-state discriminant fields (failed/retried/cancelled), confirm the filter that avoids false positives during retry; SessionEventStream's subscription cost for inactive sessions.
   3. G4: jobs mirror / workflow / subagent client subscription APIs and completion determination.
   4. G5: the minimal change surface for adding one settings-domain namespace (settings-file + api-settings-controller + ui-settings row).
@@ -142,7 +142,7 @@ Common convention: depends on Plan 1's P1.3/P1.5 for a bridge-usable dev shell; 
 - Write path: `apps/desktop/src/main.ts`'s IPC handling, `apps/desktop/src/preload.ts`.
 - Points:
   - Implement per the §3 bridge contract; `contextBridge` + `contextIsolation: true`; payload validation (length, enum, reject HTML); sender allowlist (only `http://127.0.0.1:*`).
-  - main side: `Notification` (Windows toast, `app.setAppUserModelId` guarantees toast attribution), `win.flashFrame`, window `focus`/`minimize`/`blur` state push, `flashClear` linked to window focus (except C2's until-focus).
+  - main side: `Notification` (Windows toast, `app.setAppUserModelId` guarantees toast attribution), `win.flashFrame`, window `focus`/`minimize`/`blur` state push, and `flashClear` linked to window focus.
   - Unit tests: IPC validation and the state machine are covered with a mocked BrowserWindow/Notification; real-machine behavior is P2.5.
 - Acceptance: in the dev shell `window.desktopBridge` exists, `notify` pops a toast, `flash` flashes the taskbar; invalid payloads rejected; non-loopback senders rejected.
 - Risk: Windows toast depends on `app.setAppUserModelId` and the `Notification.isSupported()` probe; where unsupported, `notify` returns false.
@@ -150,14 +150,14 @@ Common convention: depends on Plan 1's P1.3/P1.5 for a bridge-usable dev shell; 
 ### P2.2 Client-plugin implementation (sensing + policy)
 - Write path: `packages/client/desktop-integration/` (new package, P2.0 conclusion: independent workspace package) or `apps/desktop/plugins/`.
 - Points:
-  - Subscriptions: `ctx.sessions` list (C1, `completed` edge + `title` projection), the approval channel (C2), `SessionEventStream` (C3, terminal failure/cancel), the jobs mirror (C4).
+  - Subscriptions: `ctx.sessions` list (C1, `completed` edge + `title` projection), the pending-interaction registry (C2), `SessionEventStream` (C3, terminal failure/cancel), the jobs mirror (C4).
   - Policy: source switches / unfocused-only / `completionMinSeconds` / dedup window / `quietHours`, all `Config` fields.
   - Bridge calls: `window.desktopBridge` missing → no-op; copy via `t()`.
   - Lifecycle: register/unsubscribe via `ctx.effect()`; HMR-safe.
   - No model-visible input: no new session event.
 - Acceptance: a REAL-composition test (Loader boots the web profile + injects a fake bridge) asserts the mapping from each trigger source to a bridge call; zero calls with no bridge; subscriptions removed after HMR dispose; `verify-client-ui-i18n` passes.
-- Result: `packages/client/desktop-integration` (`@deepseek-ai/dsh-client-desktop-integration`) lands; C1/C2/C3/C4 are all verified by behavior tests on the client test runtime (16 cases), including no-bridge no-op and HMR subscription removal; `verify-client-ui-i18n` / `verify-client-packages` / `verify-package-dependencies` pass; an Agent Note records the bridge and reminder decisions.
-- Risk: the approval/jobs subscription APIs do not match the P2.0 conclusion → backfill the fact table and adjust.
+- Result: `packages/client/desktop-integration` (`@deepseek-ai/dsh-client-desktop-integration`) lands; C1/C2/C3/C4 are all verified by behavior tests on the client test runtime (18 cases), including approval/question/plan-review coverage, focus-transition recovery, no-bridge no-op, and HMR subscription removal; `verify-client-ui-i18n` / `verify-client-packages` / `verify-package-dependencies` pass; an Agent Note records the bridge and reminder decisions.
+- Risk: the pending-interaction/jobs subscription APIs do not match the P2.0 conclusion → backfill the fact table and adjust.
 
 ### P2.3 Desktop-shell embedding (packaging integration)
 - Write path: `apps/desktop` assembly/packaging config (plugin into the dsh-runtime closure + profile patch row).
@@ -176,7 +176,7 @@ Common convention: depends on Plan 1's P1.3/P1.5 for a bridge-usable dev shell; 
 - Write path: `docs/plans/notes/verification-integration.md` (new).
 - Checklist:
   1. C1: minimize the window → a session runs out → toast + short flash; no disturbance in the focused state.
-  2. C2: switch the window away → an approval is pending → persistent taskbar flash; stops after returning and handling.
+  2. C2: a question, plan review, or approval is pending → switch the window away → persistent taskbar flash; stops after returning and handling.
   3. C3: a tool terminal failure → failure notification; no notification during retry.
   4. C4: a background job completes → notification.
   5. Quiet hours: no notification, no flash.
@@ -206,7 +206,7 @@ Common convention: depends on Plan 1's P1.3/P1.5 for a bridge-usable dev shell; 
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| approval/jobs client subscription APIs differ from expectations | C2/C4 delayed | P2.0 front-loaded review, backfill the fact table |
+| pending-interaction/jobs client subscription APIs differ from expectations | C2/C4 delayed | P2.0 front-loaded review, backfill the fact table |
 | Windows toast support differences (no AppUserModelID / unsupported) | C1/C3/C4 notifications fail | `Notification.isSupported()` + AppUserModelID + P2.1 probe; the flash still works |
 | Notification spam (long sessions, many completions) | poor experience | dedup window + unfocused-only + minimum duration (Config) |
 | The plugin differs in a plain browser | dual-environment behavior drift | no-bridge no-op (D6) verified in P2.5-6 |

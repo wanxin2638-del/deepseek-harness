@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本包在 Web GUI 运行于 [Windows 桌面壳](../../../apps/desktop/README.zh.md) 内时，把任务状态变化变成桌面提醒：会话完成或后台任务落定时弹 toast 并短闪任务栏、审批挂起时任务栏持续闪烁、回合失败时弹严重级别 toast。它只读现有 client 状态与事件（`ctx.sessions.list`、`ctx.uiSession.pendingInteractions`、全局 `api-session/error` 转发），不发任何 RPC、不加 session event、永不进入模型请求。没有 `window.desktopBridge`（普通浏览器）时所有动作静默 no-op，因此该插件常驻 web profile 是构建期常量。
+本包在 Web GUI 运行于 [Windows 桌面壳](../../../apps/desktop/README.zh.md) 内时，把任务状态变化变成桌面提醒：会话完成或后台任务落定时弹 toast 并短闪任务栏、任意用户交互挂起时任务栏持续闪烁、回合失败时弹严重级别 toast。它只读现有 client 状态与事件（`ctx.sessions.list`、`ctx.uiSession.pendingInteractions`、全局 `api-session/error` 转发），不发任何 RPC、不加 session event、永不进入模型请求。没有 `window.desktopBridge`（普通浏览器）时所有动作静默 no-op，因此该插件常驻 web profile 是构建期常量。
 
 ## 目录
 
@@ -25,11 +25,11 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-把本插件作为 web profile 的 `dsh.client` 行挂在桌面壳旁边。壳的 preload 暴露 `window.desktopBridge`（notify / flash / 窗口状态），插件把每个触发源路由到桥上。需要窗口焦点状态时，插件读取壳推送的状态；策略全部来自 cordis.yml 的 `Config` 行：来源开关（`notifyOnCompleted`、`flashOnApproval`、`notifyOnFailure`、`notifyOnJob`）、`unfocusedOnly`、`completionMinDurationMs`、`dedupeWindowMs`、`quietHours` 与两个闪烁时长。
+把本插件作为 web profile 的 `dsh.client` 行挂在桌面壳旁边。壳的 preload 暴露 `window.desktopBridge`（notify / flash / 窗口状态），插件把每个触发源路由到桥上。需要窗口焦点状态时，插件读取壳推送的状态；策略全部来自 cordis.yml 的 `Config` 行：来源开关（`notifyOnCompleted`、`flashOnInteraction`、`notifyOnFailure`、`notifyOnJob`）、`unfocusedOnly`、`completionMinDurationMs`、`dedupeWindowMs`、`quietHours` 与两个闪烁时长。
 
 ### 提醒语义
 
-会话完成边沿（侧边栏绿色"完成"标记）发普通 toast 并短闪。审批挂起时任务栏闪烁直到窗口重新聚焦；壳在聚焦时清除闪烁。回合失败（host `agent/error` 转发）发严重级别 toast。后台任务进入 `completed`、`failed` 或 `killed` 时发对应 toast。所有 toast 与闪烁在 `quietHours` 内跳过、按类别与会话在 `dedupeWindowMs` 内去重，并受 `unfocusedOnly` 约束（默认只在窗口未聚焦时提醒）。
+会话完成边沿（侧边栏绿色"完成"标记）发普通 toast 并短闪。审批、提问或计划评审挂起时任务栏持续闪烁，直到窗口重新聚焦或交互结束；壳在聚焦时清除闪烁。如果交互在窗口聚焦时出现，用户随后切换到其他窗口时，插件会在焦点状态变化时开始闪烁。回合失败（host `agent/error` 转发）发严重级别 toast。后台任务进入 `completed`、`failed` 或 `killed` 时发对应 toast。所有 toast 与闪烁在 `quietHours` 内跳过、按类别与会话在 `dedupeWindowMs` 内去重，并受 `unfocusedOnly` 约束（默认只在窗口未聚焦时提醒）。
 
 -----
 

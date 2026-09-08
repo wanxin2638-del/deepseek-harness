@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package provides permission preset surfaces for two lifetimes in the Web GUI: a General-settings row chooses the default for later sessions without switching the current session. A picker on the host `/permission` command switches the current session through one flat preset list with the active value marked. Canonical built-in names render as locale-owned product labels, explicit host labels remain unchanged, and unknown kebab-case names render in title case. Choosing full access requires an explicit risk acknowledgement before either surface writes it. Both surfaces read one host-computed projection and write through one path, so the pushed projection frame is the single confirmation both follow.
+This package provides permission surfaces for two lifetimes in the Web GUI: a General-settings row chooses the default for later sessions without switching the current session, while a picker on the host `/permission` command switches the current session through one flat preset list. The Session header also offers an additional-directory editor beside the View tabs; each added existing directory receives the same sandbox write authority as the Session workspace. Canonical built-in names render as locale-owned product labels, explicit host labels remain unchanged, and unknown kebab-case names render in title case. Choosing full access requires an explicit risk acknowledgement before that preset writes it. All surfaces follow host-computed projection state.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ This package provides permission preset surfaces for two lifetimes in the Web GU
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount this plugin alongside the settings and commands packages; the permission row then appears in General settings, and the `/permission` picker replaces the bare command invocation. The current-session picker is available exactly while the projection key is present; a permission-less composition shows neither picker nor Settings row.
+Mount this plugin alongside the settings, commands, Session, Conversation, and directory-picker packages; the permission row then appears in General settings, the `/permission` picker replaces the bare command invocation, and the Session header exposes the additional-directory editor. The current-session surfaces are available exactly while their host projection and slot capabilities are present; a permission-less composition shows none of them.
 
 ### The picker
 
@@ -43,7 +43,7 @@ The row derives its options from the host's dynamic `defaultPreset` enum, uses t
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The General row reads the explicitly exposed `permission` Settings descriptor through `ctx.settingsScope` and writes one `settings.mutate` path operation with the descriptor revision; its observable rides the slot system's `hooks` compartment, so the renderer owns React hook binding, and a push invalidation refetches the descriptor. The value is read only when a later session is created. The current-session surface is a popupSelect decoration hung on the host `/permission` command (`ctx.commandUi.decorate`): the host command keeps its slash-menu row, argued path, and durable lifecycle logging, while the decoration replaces only the bare invocation with the picker. Options and the active mark read the session's `permissions` projection — the same host-computed select the composer chip renders. The full-access option carries a `confirmation` payload the shared popup shell renders as the in-page risk gate.
+The General row reads the explicitly exposed `permission` Settings descriptor through `ctx.settingsScope` and writes one `settings.mutate` path operation with the descriptor revision; its observable rides the slot system's `hooks` compartment, so the renderer owns React hook binding, and a push invalidation refetches the descriptor. The value is read only when a later session is created. The current-session preset surface is a popupSelect decoration hung on the host `/permission` command (`ctx.commandUi.decorate`): the host command keeps its slash-menu row, argued path, and durable lifecycle logging, while the decoration replaces only the bare invocation with the picker. The additional-directory editor registers a Session header slot, reads `sandboxWritableRoots`, and submits `/sandbox-path add` or `/sandbox-path remove`; the Host validates and persists the directory before the projection updates. Options and the active mark read the session's `permissions` projection — the same host-computed select the composer chip renders. The full-access option carries a `confirmation` payload the shared popup shell renders as the in-page risk gate.
 
 </details>
 
@@ -77,7 +77,7 @@ No direct invalidation; the knob consumers own any request-prefix changes.
 
 These limits define the current permission surfaces. They are current package constraints, not a general policy comparison or a task backlog.
 
-- **The Settings row is Web-only** — non-Web clients may still switch the current session through `/permission`, but do not receive this browser contribution.
+- **The Settings row and directory editor are Web-only** — non-Web clients may still switch the current session through `/permission` or `/sandbox-path`, but do not receive these browser contributions.
 - **Preset descriptions come from the host** — localized built-in labels may therefore appear beside a description written in another language.
 
 <a id="dev-note"></a>

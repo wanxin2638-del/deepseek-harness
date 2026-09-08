@@ -41,8 +41,8 @@ export interface Config {
   quietHours?: { startHour: number; endHour: number } | null
   /** C1: completed-session toast and short flash. */
   notifyOnCompleted?: boolean
-  /** C2: persistent taskbar flash while an approval is pending. */
-  flashOnApproval?: boolean
+  /** C2: persistent taskbar flash while a user interaction is pending. */
+  flashOnInteraction?: boolean
   /** C3: failed-turn toast and flash. */
   notifyOnFailure?: boolean
   /** C4: background-job terminal toast and flash. */
@@ -64,7 +64,7 @@ export const Config: z<Config> = z.object({
     endHour: z.natural().max(24),
   }), z.const(null)]).default(null),
   notifyOnCompleted: z.boolean().default(true),
-  flashOnApproval: z.boolean().default(true),
+  flashOnInteraction: z.boolean().default(true),
   notifyOnFailure: z.boolean().default(true),
   notifyOnJob: z.boolean().default(true),
   completionFlashMs: z.natural().min(0).default(4_000),
@@ -94,7 +94,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   // Window focus awareness: decisions are edge-triggered, and the shell pushes
   // state transitions plus answers the initial read.
   let windowState: DesktopWindowState = 'focused'
-  void bridge.windowState().then((state) => { windowState = state })
+  let disposed = false
 
   const attentionAllowed = (): boolean => !cfg.unfocusedOnly || windowState !== 'focused'
   const inQuietHours = (): boolean => {
@@ -221,29 +221,36 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     }
   }
 
-  // C2 · pending approvals: `uiSession.pendingInteractions` presence (G2).
+  // C2 · pending user interactions: `uiSession.pendingInteractions` presence (G2).
   const pendingKeys = new Set<string>()
   const reconcilePending = (): void => {
+    if (disposed) return
     const snapshot = ctx.uiSession.pendingInteractions.getSnapshot()
-    const next = new Set(
-      [...snapshot.values()].filter(interaction => interaction.kind === 'approval').map(i => i.key),
-    )
-    if (next.size === pendingKeys.size && [...next].every(key => pendingKeys.has(key))) return
-    pendingKeys.clear()
-    for (const key of next) pendingKeys.add(key)
+    const next = new Set([...snapshot.values()].map(interaction => interaction.key))
+    const changed = next.size !== pendingKeys.size || [...next].some(key => !pendingKeys.has(key))
+    if (changed) {
+      pendingKeys.clear()
+      for (const key of next) pendingKeys.add(key)
+    }
     if (next.size > 0) {
-      if (cfg.flashOnApproval && attentionAllowed() && !inQuietHours()) {
+      if (cfg.flashOnInteraction && attentionAllowed() && !inQuietHours()) {
         void bridge.flash({ kind: 'until-focus' }).catch((error: unknown) => {
-          console.warn('[desktop-integration] approval flash rejected by the shell:', error)
+          console.warn('[desktop-integration] interaction flash rejected by the shell:', error)
         })
       }
-    } else {
+    } else if (changed) {
       void bridge.flashClear().catch(() => {
         // flashClear after the pending set emptied; a rejection leaves a stale
         // flash the next focus clears anyway (the shell clears on focus).
       })
     }
   }
+
+  void bridge.windowState().then((state) => {
+    if (disposed) return
+    windowState = state
+    if (state !== 'focused') reconcilePending()
+  })
 
   // C3 · failed turns: the global `api-session/error` forward (G3).
   const onSessionError = (sessionId: SessionId, message: string): void => {
@@ -259,12 +266,18 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   }
 
   ctx.effect(() => {
-    const disposeState = bridge.onWindowState((state) => { windowState = state })
+    const disposeState = bridge.onWindowState((state) => {
+      if (windowState === state) return
+      windowState = state
+      if (state !== 'focused') reconcilePending()
+    })
     const disposeList = ctx.sessions.list.subscribe(reconcileList)
     const disposeJobs = ctx.sessions.list.subscribe(reconcileJobs)
     const disposePending = ctx.uiSession.pendingInteractions.subscribe(reconcilePending)
+    reconcilePending()
     const disposeError = ctx.remote.$on('api-session/error', onSessionError)
     return () => {
+      disposed = true
       disposeState()
       disposeList()
       disposeJobs()

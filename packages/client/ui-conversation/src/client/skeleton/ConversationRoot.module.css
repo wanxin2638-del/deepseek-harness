@@ -147,6 +147,12 @@
 }
 
 /* figma Tab_Group 34:11441: 35px strip, gap 36, pad-left 8, tabs bottom-aligned. */
+.tabsRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
 .tabs {
   position: relative;
   z-index: 1;
@@ -154,6 +160,14 @@
   gap: 36px;
   margin-top: 4px;
   padding-left: 8px;
+}
+
+.tabsTrailing {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-height: 35px;
+  margin-top: 4px;
 }
 
 /* figma .Tab 34:11442: 13/16 text (figma wt510, rendered 500), gap 8 to the 2px bar. */

@@ -128,10 +128,20 @@ function jobMap(sessionId: string, jobs: readonly SessionJob[]): SessionListStat
   return map
 }
 
+/** Publish one pending interaction through the real ui-session registry. */
+function publishPending(
+  runtime: SlotTestRuntime,
+  key: string,
+  kind: 'approval' | 'question' | 'plan-review',
+  sessionId: string,
+): () => void {
+  const publish = runtime.ctx.uiSession.registerPendingInteraction(() => 0)
+  return publish({ key, kind, sessionId: sessionId as SessionId }, async () => {})
+}
+
 /** Publish one pending approval interaction through the real ui-session registry. */
 function publishApproval(runtime: SlotTestRuntime, key: string, sessionId: string): () => void {
-  const publish = runtime.ctx.uiSession.registerPendingInteraction(() => 0)
-  return publish({ key, kind: 'approval', sessionId: sessionId as SessionId }, async () => {})
+  return publishPending(runtime, key, 'approval', sessionId)
 }
 
 function notifyCalls(bridge: FakeBridge | undefined) {
@@ -217,10 +227,14 @@ describe('desktop-integration browser half', () => {
     }
   })
 
-  it('C2: an approval pending interaction flashes until-focus, then clears', async () => {
+  it.each([
+    ['approval', 'approval:1'],
+    ['question', 'question:1'],
+    ['plan-review', 'plan-review:1'],
+  ] as const)('C2: a pending %s interaction flashes until-focus, then clears', async (kind, key) => {
     const bench_ = await bench()
     try {
-      const remove = publishApproval(bench_.runtime, 'approval:1', 's1')
+      const remove = publishPending(bench_.runtime, key, kind, 's1')
       expect(flashCalls(bench_.bridge)).toEqual([{ kind: 'until-focus' }])
       remove()
       expect(bench_.bridge?.calls.at(-1)).toEqual({ op: 'flashClear' })
@@ -229,12 +243,14 @@ describe('desktop-integration browser half', () => {
     }
   })
 
-  it('C2: skips the flash while focused and still clears on release', async () => {
+  it('C2: starts flashing when a pending interaction becomes unfocused', async () => {
     const bench_ = await bench()
     try {
       bench_.bridge?.setState('focused')
-      const remove = publishApproval(bench_.runtime, 'approval:2', 's1')
+      const remove = publishPending(bench_.runtime, 'question:2', 'question', 's1')
       expect(flashCalls(bench_.bridge)).toEqual([])
+      bench_.bridge?.setState('visible-unfocused')
+      expect(flashCalls(bench_.bridge)).toEqual([{ kind: 'until-focus' }])
       remove()
       expect(bench_.bridge?.calls.at(-1)).toEqual({ op: 'flashClear' })
     } finally {

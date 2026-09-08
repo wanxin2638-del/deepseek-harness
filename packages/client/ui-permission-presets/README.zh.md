@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本包为 Web GUI 中两种生命周期提供权限预设表面：通用设置中的一行选择之后创建会话所用的默认值，但不会切换当前会话。挂在宿主 `/permission` 命令上的选择器通过一张扁平预设列表切换当前会话，并标记 active 值。规范内置名称渲染为 locale 所有的产品标签，显式 host 标签保持原样，未知 kebab-case 名称渲染为 Title Case。选择完全权限时，该行或选择器写入前必须先显式确认风险。两个表面读取同一份宿主计算的投影、经同一条路径写入，因此推送的投影帧是两者共同跟随的唯一确认。
+本包为 Web GUI 提供不同生命周期的权限表面：通用设置中的一行选择之后创建会话所用的默认值，但不会切换当前会话；挂在宿主 `/permission` 命令上的选择器通过一张扁平预设列表切换当前会话。Session header 还在 View 标签旁提供额外目录编辑器；每个添加的已存在目录都获得与 Session 工作区相同的沙箱写入权限。规范内置名称渲染为 locale 所有的产品标签，显式 host 标签保持原样，未知 kebab-case 名称渲染为 Title Case。选择完全权限时，只有该预设写入前需要显式确认风险。所有表面都跟随宿主计算的投影状态。
 
 ## 目录
 
@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-与设置与命令包一起挂载本插件；权限行随即出现在通用设置中，`/permission` 选择器替换裸命令调用。当前会话选择器恰在投影 key 存在时可用；无权限组合既不显示选择器，也不显示设置行。
+与设置、命令、Session、Conversation 及目录选择器包一起挂载本插件；权限行随即出现在通用设置中，`/permission` 选择器替换裸命令调用，Session header 也会显示额外目录编辑器。当前会话表面恰在对应宿主 projection 与 slot 能力存在时可用；无权限组合不会显示这些表面。
 
 ### 选择器
 
@@ -43,7 +43,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-通用行经 `ctx.settingsScope` 读取显式暴露的 `permission` Settings 描述符，并携带描述符 revision 写入一条 `settings.mutate` 路径操作；其 observable 经槽位系统的 `hooks` 格传递，因此 React 钩子绑定归渲染器，推送失效通知会重新获取描述符。该值只在之后创建会话时读取。当前会话表面是挂在宿主 `/permission` 命令上的 popupSelect 装饰（`ctx.commandUi.decorate`）：宿主命令保留斜杠菜单行、带参路径与持久生命周期记账，装饰只把裸调用替换为选择器。选项与 active 标记读取会话的 `permissions` 投影——与 composer chip 渲染的同一份宿主计算 select。完全权限选项携带 `confirmation` 载荷，由共享弹窗外壳渲染为页内风险门。
+通用行经 `ctx.settingsScope` 读取显式暴露的 `permission` Settings 描述符，并携带描述符 revision 写入一条 `settings.mutate` 路径操作；其 observable 经槽位系统的 `hooks` 格传递，因此 React 钩子绑定归渲染器，推送失效通知会重新获取描述符。该值只在之后创建会话时读取。当前会话预设表面是挂在宿主 `/permission` 命令上的 popupSelect 装饰（`ctx.commandUi.decorate`）：宿主命令保留斜杠菜单行、带参路径与持久生命周期记账，装饰只把裸调用替换为选择器。额外目录编辑器注册 Session header slot，读取 `sandboxWritableRoots`，并提交 `/sandbox-path add` 或 `/sandbox-path remove`；Host 会在 projection 更新前校验并持久化目录。选项与 active 标记读取会话的 `permissions` 投影——与 composer chip 渲染的同一份宿主计算 select。完全权限选项携带 `confirmation` 载荷，由共享弹窗外壳渲染为页内风险门。
 
 </details>
 
@@ -77,7 +77,7 @@ kind: "package-reference"
 
 这些限制界定了当前权限表面。它们是当前包约束，不是通用策略对比或任务积压。
 
-- **设置行仅限 Web**——非 Web 客户端仍可经 `/permission` 切换当前会话，但不会获得这项浏览器贡献。
+- **设置行与目录编辑器仅限 Web**——非 Web 客户端仍可经 `/permission` 或 `/sandbox-path` 切换/维护当前会话，但不会获得这些浏览器贡献。
 - **预设描述来自宿主**——本地化的内置标签旁边可能显示另一种语言编写的描述。
 
 <a id="dev-note"></a>

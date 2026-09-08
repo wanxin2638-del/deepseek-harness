@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-07-desktop-bridge-and-task-reminders.md
-2026-09-07-desktop-bridge-and-task-reminders.md: 477efa270dc61af386e4fbeee47f5e77d45d9837
-2026-09-07-desktop-bridge-and-task-reminders.zh.md: 965c1f963b3f2b4c5fbbe47fe2a48eb76ae6cf19
+2026-09-07-desktop-bridge-and-task-reminders.md: a1a88eae12ce28aefcb0565e78640b0b425497c6
+2026-09-07-desktop-bridge-and-task-reminders.zh.md: d046d1aaac24cb1eb888e8c50a45d9ce0eeaa49f

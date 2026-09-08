@@ -20,30 +20,63 @@
  * @module @deepseek-ai/dsh-sandbox-policy
  */
 
-import { resolve as resolvePath } from 'node:path'
+import { isAbsolute, resolve as resolvePath } from 'node:path'
+import { realpath, stat } from 'node:fs/promises'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { z as zod } from 'zod'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-agent'
 import { canonicalPath, type SandboxExecutionPolicy, type SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import type { Session } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-system-prompt'
+import type {} from '@deepseek-ai/dsh-commands'
+import type { SandboxWritableRoots } from './types.ts'
 
 export { SANDBOX_MODES, setSandboxMode } from './session-mode.ts'
+export type * from './types.ts'
 
 /** Resolve filesystem identity before lexical normalization can erase symlink-sensitive components. */
 function resolveWorkspaceRoot(path: string): string {
   return resolvePath(canonicalPath(path))
 }
 
+/** Resolve one user-entered root and require an existing directory. */
+async function resolveWritableRoot(path: string): Promise<string> {
+  if (!isAbsolute(path)) throw new Error(`sandbox writable root must be an absolute path: ${path}`)
+  let resolved: string
+  try {
+    resolved = await realpath(path)
+  } catch (error: unknown) {
+    throw new Error(`sandbox writable root is unavailable: ${path}`, { cause: error })
+  }
+  let info: Awaited<ReturnType<typeof stat>>
+  try {
+    info = await stat(resolved)
+  } catch (error: unknown) {
+    throw new Error(`sandbox writable root cannot be inspected: ${path}`, { cause: error })
+  }
+  if (!info.isDirectory()) throw new Error(`sandbox writable root is not a directory: ${path}`)
+  return resolveWorkspaceRoot(resolved)
+}
+
+/** Normalize a removal request without requiring the directory to still exist. */
+function normalizeWritableRoot(path: string): string {
+  if (!isAbsolute(path)) throw new Error(`sandbox writable root must be an absolute path: ${path}`)
+  return resolveWorkspaceRoot(path)
+}
+
 /** Render the policy without claiming which capabilities are mounted. */
 function renderPolicyContext(policy: SandboxExecutionPolicy): string {
+  const extraRoots = policy.extraWritableRoots ?? []
+  const extraText = extraRoots.length === 0
+    ? ''
+    : ` Additional authorized directories: ${JSON.stringify(extraRoots)}.`
   switch (policy.mode) {
     case 'read-only':
       return 'Current DSH file policy: read-only. Any available operation enforced by the DSH file sandbox cannot modify files in the standing mode. Do not refuse a required modification from this policy alone: try an available tool normally and follow any denial and escalation guidance it returns.'
     case 'workspace-write':
-      return `Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: ${JSON.stringify(policy.workspaceRoot)}. Some platform temporary areas may also be writable.`
+      return `Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: ${JSON.stringify(policy.workspaceRoot)}.${extraText} Some platform temporary areas may also be writable.`
     case 'danger-full-access':
       return 'Current DSH file policy: danger-full-access. The DSH file sandbox does not restrict file modifications by available operations.'
     /* v8 ignore next 4 -- SandboxMode is a typed same-process closed union; this branch is only the static exhaustiveness guard. */
@@ -100,6 +133,21 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
   }
 }
 
+const writableRootsStateSchema = zod.array(zod.string())
+
+function applyWritableRootEvent(
+  state: string[],
+  event: SessionEvent,
+): string[] {
+  if (event.type !== 'sandbox/writable-root') return state
+  if (event.data.action === 'add') {
+    return state.includes(event.data.path) ? state : [...state, event.data.path]
+  }
+  return state.includes(event.data.path)
+    ? state.filter(path => path !== event.data.path)
+    : state
+}
+
 /**
  * The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment
  * default mode, fallback workspace root, and current request-time policy
@@ -136,6 +184,14 @@ export class SandboxPolicyService extends Service {
       init: () => null,
       apply: (state, event) => (event.type === 'sandbox/mode' ? event.data.mode : state),
     })
+    ctx.sessionProjections.register({
+      key: 'sandboxWritableRoots',
+      stateVersion: 1,
+      stateSchema: writableRootsStateSchema,
+      init: () => [],
+      apply: applyWritableRootEvent,
+      wire: { viewSchema: writableRootsStateSchema, view: state => state },
+    })
 
     ctx.inject(['systemPrompt'], (scope: Context) => {
       scope.systemPrompt.context({
@@ -146,6 +202,34 @@ export class SandboxPolicyService extends Service {
           return session === undefined
             ? ''
             : renderPolicyContext(this.resolve({ session }))
+        },
+      })
+    })
+    ctx.inject(['commands'], (commandCtx) => {
+      commandCtx.commands.register({
+        name: 'sandbox-path',
+        description: 'Add or remove an additional writable directory for this session',
+        input: { hint: '<add|remove> <absolute directory>' },
+        recordInput: false,
+        handler: async ({ agent, rawInput }) => {
+          const match = /^(add|remove)\s+(.+)$/su.exec(rawInput.trim())
+          if (match === null || (match[1] !== 'add' && match[1] !== 'remove') || match[2] === undefined) {
+            return { kind: 'error', text: 'usage: /sandbox-path <add|remove> <absolute directory>' }
+          }
+          const path = match[2].trim()
+          try {
+            if (match[1] === 'add') {
+              const committed = await this.addWritableRoot(agent.session, path)
+              return { kind: 'success', text: `additional writable directory ${committed}` }
+            }
+            const removed = this.removeWritableRoot(agent.session, path)
+            return {
+              kind: 'success',
+              text: removed ? `removed additional writable directory ${normalizeWritableRoot(path)}` : 'additional writable directory was not present',
+            }
+          } catch (error: unknown) {
+            return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
+          }
         },
       })
     })
@@ -162,11 +246,51 @@ export class SandboxPolicyService extends Service {
    */
   resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy {
     const { session } = request
+    const extraWritableRoots = session === undefined ? [] : this.writableRootsOf(session)
     return {
       mode: request.mode ?? (session === undefined ? undefined : this.overrideOf(session)) ?? this.defaultMode,
       workspaceRoot: resolveWorkspaceRoot(session?.header.cwd ?? this.workspaceRoot),
       ...session === undefined ? {} : { sessionId: session.id },
+      ...extraWritableRoots.length === 0 ? {} : { extraWritableRoots },
     }
+  }
+
+  /**
+   * Read the session's canonical additional writable roots.
+   * @param session - session whose additional roots are read.
+   * @returns canonical additional writable roots in user-maintained order.
+   */
+  private writableRootsOf(session: Session): SandboxWritableRoots {
+    const roots = this.ctx.sessionProjections.stateOf(session, 'sandboxWritableRoots')
+    if (roots === undefined) throw new Error('sandbox: sandboxWritableRoots projection is not registered')
+    return roots
+  }
+
+  /**
+   * Add one existing directory to the session's additional writable roots.
+   * @param session - session receiving the durable root grant.
+   * @param path - absolute existing directory to grant.
+   * @returns the canonical directory path recorded in the event.
+   */
+  private async addWritableRoot(session: Session, path: string): Promise<string> {
+    const normalized = await resolveWritableRoot(path)
+    if (!this.writableRootsOf(session).includes(normalized)) {
+      session.append('sandbox/writable-root', { action: 'add', path: normalized })
+    }
+    return normalized
+  }
+
+  /**
+   * Remove one additional writable directory from the session.
+   * @param session - session whose durable root grant is changed.
+   * @param path - absolute directory path to remove.
+   * @returns `true` when a grant was removed, or `false` when it was absent.
+   */
+  private removeWritableRoot(session: Session, path: string): boolean {
+    const normalized = normalizeWritableRoot(path)
+    if (!this.writableRootsOf(session).includes(normalized)) return false
+    session.append('sandbox/writable-root', { action: 'remove', path: normalized })
+    return true
   }
 
   /**

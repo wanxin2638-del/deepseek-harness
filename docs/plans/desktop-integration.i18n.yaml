@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/plans/desktop-integration.md
-desktop-integration.md: 0ed341da6961fa118aaf82f968093dae764e6a53
-desktop-integration.zh.md: f41397125b5b73aece5eee5095ab602ca3b72151
+desktop-integration.md: 3141ed9ba06184076383e8cc5a17ed6f913fe68d
+desktop-integration.zh.md: 513399ca6015e03da3fa5ec33c333326a8571fab

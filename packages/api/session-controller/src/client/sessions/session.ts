@@ -3,6 +3,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
 import type { AttachmentIdType, FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type { CommandResult } from '@deepseek-ai/dsh-commands/types'
 import type { SubagentAddress } from '@deepseek-ai/dsh-subagent/client'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import { SessionLogOffset, SessionSeq, type SessionId } from '@deepseek-ai/dsh-session/types'
@@ -378,10 +379,17 @@ export class Session implements SessionFace {
    * @param line - the full command line, leading slash included.
    * @returns the admission result.
    */
-  async command(line: string): Promise<RemoteResult<{ matched: boolean }>> {
+  async command(line: string): Promise<RemoteResult<{ matched: boolean; result?: CommandResult }>> {
     const result = await this.remote.commands.execute(this.sessionId, line, [])
     if (!result.ok) return result
-    return { ok: true, value: { matched: result.value !== undefined } }
+    const execution = result.value as { result: CommandResult } | undefined
+    return {
+      ok: true,
+      value: {
+        matched: execution !== undefined,
+        ...execution === undefined ? {} : { result: execution.result },
+      },
+    }
   }
 
   /** First open: pull the tail page (idempotent — in-flight/already-open returns the existing promise). */

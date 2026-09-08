@@ -66,6 +66,42 @@ node apps/desktop/node_modules/electron/install.js
 
 The install command restores dependencies from the existing lockfile; the second command ensures the Electron executable is available. Run these recovery commands only when dependencies are missing.
 
+## Build, launch, and package from a clean checkout
+
+Use the following PowerShell commands from the repository root for a fresh Windows desktop setup. The root `build` command builds the Host, Client, and Web artifacts; `assemble` stages the backend closure and standalone Node runtime required by the desktop shell.
+
+### Build and launch
+
+```powershell
+pnpm install --config.confirmModulesPurge=false
+pnpm --filter @deepseek-ai/dsh-desktop build
+pnpm run build
+pnpm --filter @deepseek-ai/dsh-desktop assemble
+pnpm --config.verify-deps-before-run=false --filter @deepseek-ai/dsh-desktop start
+```
+
+If `apps\desktop\node_modules\electron\dist\electron.exe` is missing after installation, run this once from `apps\desktop` and then return to the repository root:
+
+```powershell
+node node_modules\electron\install.js
+```
+
+### Build the portable executable
+
+Run the build and staging steps first, then package the portable executable:
+
+```powershell
+pnpm install --config.confirmModulesPurge=false
+pnpm --filter @deepseek-ai/dsh-desktop build
+pnpm run build
+pnpm --filter @deepseek-ai/dsh-desktop assemble
+$env:CI='true'
+$env:npm_config_ignore_scripts='true'
+pnpm --filter @deepseek-ai/dsh-desktop dist
+```
+
+The `CI` and `npm_config_ignore_scripts` variables keep Electron Builder's internal production dependency install non-interactive and prevent the root development postinstall hook from running after production pruning. The packaged executable is written to `apps\desktop\release\`. The `.runtime\`, `.runtime-node\`, `.runtime-pack\`, and `release\` directories are local build products and must be regenerated on a fresh checkout.
+
 ## Community and support
 
 - Submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).

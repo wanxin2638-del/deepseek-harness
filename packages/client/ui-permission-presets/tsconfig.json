@@ -21,6 +21,9 @@
       "path": "../ui-commands"
     },
     {
+      "path": "../ui-conversation"
+    },
+    {
       "path": "../ui-primitives"
     },
     {
@@ -37,6 +40,9 @@
     },
     {
       "path": "../../interaction/permission-presets"
+    },
+    {
+      "path": "../../sandbox/sandbox-policy"
     },
     {
       "path": "../../api/remotes/tsconfig.client.json"

@@ -50,4 +50,16 @@ describe('sandbox-policy invariants', () => {
       packageName: '@deepseek-ai/dsh-sandbox-policy',
     })
   })
+
+  it('accepts valid writable-root events and rejects malformed ones', async () => {
+    const ctx = await setup()
+    expect(() => { ctx.emit('session/event', {} as Session, {
+      type: 'sandbox/writable-root', seq: 0, time: 0,
+      data: { action: 'add', path: '/worktree' },
+    } as SessionEvent) }).not.toThrow()
+    expect(() => { ctx.emit('session/event', {} as Session, {
+      type: 'sandbox/writable-root', seq: 0, time: 0,
+      data: { action: 'grant', path: '/worktree' },
+    } as SessionEvent) }).toThrow(InvariantError)
+  })
 })

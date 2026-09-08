@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-fs-sandbox` provides the sandbox-enforcing `ctx.fs` backend: it extends [`fs-local`](../fs-local/README.md) with every text-storage behavior intact and adds only a per-call mode fence on writes and edits, while reads always pass through. Under `read-only` every mutation is refused; under `workspace-write` a mutation is allowed only when the target sits under the session workspace or a platform temp root; under `danger-full-access` mutations run unfenced. Loading it instead of `fs-local`, together with the shared `ctx.sandboxPolicy` service, is the whole swap — the model-facing tools and the policy plugin are untouched. A denial is a structured `FS_SANDBOX_DENIED` error that the tools render as the familiar `[sandbox: file access denied under <mode> mode]` marker with a same-turn escalation hint. Choose it when a session's file mutations must be confined to its workspace.
+`dsh-fs-sandbox` provides the sandbox-enforcing `ctx.fs` backend: it extends [`fs-local`](../fs-local/README.md) with every text-storage behavior intact and adds only a per-call mode fence on writes and edits, while reads always pass through. Under `read-only` every mutation is refused; under `workspace-write` a mutation is allowed only when the target sits under the session workspace, a session-authorized extra root, or a platform temp root; under `danger-full-access` mutations run unfenced. Loading it instead of `fs-local`, together with the shared `ctx.sandboxPolicy` service, is the whole swap — the model-facing tools and the policy plugin are untouched. A denial is a structured `FS_SANDBOX_DENIED` error that the tools render as the familiar `[sandbox: file access denied under <mode> mode]` marker with a same-turn escalation hint. Choose it when a session's file mutations must be confined to its workspace and explicitly authorized extra directories.
 
 ## Table of Contents
 
@@ -43,7 +43,7 @@ The backend's config is the local backend's unchanged (`cwd` resolution default 
 
 ### How the fence behaves
 
-The effective mode comes from the calling session's override or escalation grant, falling back to the deployment default when neither is in force. `read-only` denies every mutation with the structured `FS_SANDBOX_DENIED`. `workspace-write` allows a mutation only when the target canonicalizes under the workspace root or a platform temp area (`/tmp`, `os.tmpdir()`) — the same writable set the Seatbelt profile grants. `danger-full-access` delegates unfenced.
+The effective mode comes from the calling session's override or escalation grant, falling back to the deployment default when neither is in force. `read-only` denies every mutation with the structured `FS_SANDBOX_DENIED`. `workspace-write` allows a mutation only when the target canonicalizes under the workspace root, a session-authorized extra root, or a platform temp area (`/tmp`, `os.tmpdir()`) — the same writable set the platform profiles grant. `danger-full-access` delegates unfenced.
 
 ### Observable success and failures
 
@@ -72,7 +72,7 @@ The fence is a policy check in trusted code over a model-controlled path — not
 
 ### How a mutation is fenced
 
-Each mutation resolves the per-call policy (`danger-full-access` returns the caller's target untouched; `read-only` throws `FS_SANDBOX_DENIED`), then for `workspace-write` re-canonicalizes the target immediately and requires containment under one of the writable roots derived from the single `writableRoots` function — the same set the Seatbelt profile grants, so the fs fence and the bash runner cannot drift. The fresh target is the one mutated, so a symlink ancestor swapped since the tool resolved it is caught.
+Each mutation resolves the per-call policy (`danger-full-access` returns the caller's target untouched; `read-only` throws `FS_SANDBOX_DENIED`), then for `workspace-write` re-canonicalizes the target immediately and requires containment under one of the writable roots derived from the single `writableRoots` function — the same set every platform profile grants, so the fs fence and the bash runner cannot drift. The fresh target is the one mutated, so a symlink ancestor swapped since the tool resolved it is caught.
 
 ### Threat model
 

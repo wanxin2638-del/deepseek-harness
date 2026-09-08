@@ -143,6 +143,48 @@ describe('windows-acl write grants (LocalSandboxProvider)', () => {
     }
   })
 
+  it('materializes extra writable roots on the shared workspace capability', async () => {
+    try {
+      const { sandbox, fiber } = await setup()
+      const ws = workspaceRoot()
+      const extra = workspaceRoot()
+      scratch.push(ws, extra)
+      const policy: SandboxPolicy = {
+        mode: 'workspace-write',
+        workspaceRoot: ws,
+        extraWritableRoots: [extra],
+        sessionId: SessionId('sess-extra-root'),
+      }
+
+      sandbox.confine(['pwsh', '/Command', 'x'], policy)
+      expect(mockState.grants[0]?.added).toEqual([
+        { path: ws, standing: true },
+        { path: extra, standing: true },
+      ])
+      await fiber.dispose()
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('disposes the shared workspace capability when an extra root grant fails', async () => {
+    try {
+      const { sandbox, fiber } = await setup()
+      const ws = workspaceRoot()
+      const extra = workspaceRoot()
+      scratch.push(ws, extra)
+      const basePolicy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: ws, sessionId: SessionId('sess-extra-failure') }
+      sandbox.confine(['pwsh', '/Command', 'x'], basePolicy)
+      mockState.addFailure = new Error('extra root grant exploded')
+      expect(() => sandbox.confine(['pwsh', '/Command', 'x'], { ...basePolicy, extraWritableRoots: [extra] }))
+        .toThrow('extra root grant exploded')
+      expect(mockState.grants[0]?.disposed).toBe(true)
+      await fiber.dispose()
+    } finally {
+      cleanup()
+    }
+  })
+
   it('read-only materializes no capability; upgrade creates them and downgrade leaves them reusable', async () => {
     try {
       const { sandbox, fiber } = await setup()

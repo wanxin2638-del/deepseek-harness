@@ -21,6 +21,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 // Type-only: pulls the ctx.remote merge and the forwarded-event key face
 // (the settings invalidation rides the allowlist) into this program.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
@@ -29,8 +30,9 @@ import type { ClientSessionContext } from '@deepseek-ai/dsh-client-ui-input-trig
 import type { PermissionSelect } from '@deepseek-ai/dsh-permission-presets/client'
 import { PermissionRow } from './PermissionRow.tsx'
 import type { PermissionRowInjected } from './PermissionRow.tsx'
+import { AuthorizedPaths, type AuthorizedPathsInjected } from './AuthorizedPaths.tsx'
 import {
-  accessEn, accessZh, en, zh,
+  accessEn, accessZh, en, zh, type PermissionAccessKey,
 } from './locales.ts'
 import {
   displayPermissionPreset, FULL_ACCESS_PRESET,
@@ -44,11 +46,18 @@ export type {
 
 /** Required services (cordis fiber inject). */
 export const inject = [
-  'commandUi', 'sessions', 'slots', 'locale', 'remote', 'remote.settings',
+  'commandUi', 'sessions', 'slots', 'locale', 'remote', 'remote.settings', 'remote.directoryPicker',
   'settingsScope', 'settingsSchema',
 ]
 
 const ACCESS_NS = 'permission.access'
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    /** Current-session permission and additional sandbox-root copy. */
+    'permission.access': PermissionAccessKey
+  }
+}
 
 /** Read one session's current permissions projection value (undefined = capability absent). */
 function selectOf(session: SessionFace | undefined): PermissionSelect | undefined {
@@ -100,6 +109,17 @@ export function apply(ctx: ClientContext): void {
         'confirm.acknowledge': accessZh['confirm.acknowledge'],
         'confirm.cancel': accessZh['confirm.cancel'],
         'confirm.enable': accessZh['confirm.enable'],
+        'roots.title': accessZh['roots.title'],
+        'roots.description': accessZh['roots.description'],
+        'roots.open': accessZh['roots.open'],
+        'roots.add': accessZh['roots.add'],
+        'roots.pick': accessZh['roots.pick'],
+        'roots.pathPlaceholder': accessZh['roots.pathPlaceholder'],
+        'roots.cancel': accessZh['roots.cancel'],
+        'roots.remove': accessZh['roots.remove'],
+        'roots.empty': accessZh['roots.empty'],
+        'roots.invalid': accessZh['roots.invalid'],
+        'roots.failed': accessZh['roots.failed'],
       }),
       ctx.locale.register(ACCESS_NS, 'en', {
         'preset.readOnly': accessEn['preset.readOnly'],
@@ -110,6 +130,17 @@ export function apply(ctx: ClientContext): void {
         'confirm.acknowledge': accessEn['confirm.acknowledge'],
         'confirm.cancel': accessEn['confirm.cancel'],
         'confirm.enable': accessEn['confirm.enable'],
+        'roots.title': accessEn['roots.title'],
+        'roots.description': accessEn['roots.description'],
+        'roots.open': accessEn['roots.open'],
+        'roots.add': accessEn['roots.add'],
+        'roots.pick': accessEn['roots.pick'],
+        'roots.pathPlaceholder': accessEn['roots.pathPlaceholder'],
+        'roots.cancel': accessEn['roots.cancel'],
+        'roots.remove': accessEn['roots.remove'],
+        'roots.empty': accessEn['roots.empty'],
+        'roots.invalid': accessEn['roots.invalid'],
+        'roots.failed': accessEn['roots.failed'],
       }),
     ]
     return () => { for (const dispose of disposers) dispose() }
@@ -118,6 +149,8 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(ACCESS_NS)
   const sessionFor = (session: ClientSessionContext): SessionFace | undefined =>
     sessions.binding(session.sessionId)?.session
+  const sessionById = (sessionId: SessionFace['sessionId']): SessionFace | undefined =>
+    sessions.binding(sessionId)?.session
 
   ctx.effect(() => ctx.locale.register('settings.permission', { zh, en }), 'ui-permission: settings row dictionaries')
 
@@ -153,7 +186,7 @@ export function apply(ctx: ClientContext): void {
       options: (session) => {
         const value = selectOf(sessionFor(session))
         if (value === undefined) throw new Error('permission presets are not available on this host')
-        return Promise.resolve(optionsOf(value, t))
+        return Promise.resolve(optionsOf(value, key => t(key as PermissionAccessKey)))
       },
       onSelect: async (option, session) => {
         const live = sessionFor(session)
@@ -164,4 +197,23 @@ export function apply(ctx: ClientContext): void {
       },
     },
   }), 'ui-permission: /permission decoration')
+
+  ctx.slots.inject('conversation.session.header.tabs.trailing', () => ctx.slots.register({
+    name: 'conversation.session.header.tabs.trailing',
+    id: 'sandbox-roots',
+    locale: ACCESS_NS,
+    inject: (sessionId): AuthorizedPathsInjected => ({
+      command: async (line) => {
+        const live = sessionById(sessionId)
+        if (live === undefined) return false
+        const result = await live.command(line)
+        return result.ok && result.value.matched && result.value.result?.kind !== 'error'
+      },
+      pickDirectory: async () => {
+        const result = await ctx.remote.directoryPicker.pick()
+        if (!result.ok) throw new Error(result.error.message)
+        return result.value
+      },
+    }),
+  }, AuthorizedPaths))
 }

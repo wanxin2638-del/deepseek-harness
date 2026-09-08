@@ -617,6 +617,24 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/sandbox/sandbox-policy/src/session-mode.ts:33`](../packages/sandbox/sandbox-policy/src/session-mode.ts)
 
+<a id="sandboxwritable-root--log-only"></a>
+
+#### `sandbox/writable-root` — log-only
+
+```ts persistence-catalog
+/**
+ * A user-maintained additional directory root for this Session.
+ * @param action - adds or removes the canonical directory root.
+ * @param path - canonical absolute directory path.
+ */
+'sandbox/writable-root': {
+  action: 'add' | 'remove'
+  path: string
+}
+```
+
+来源：[`packages/sandbox/sandbox-policy/src/session-mode.ts:43`](../packages/sandbox/sandbox-policy/src/session-mode.ts)
+
 ### `schedule/*`
 
 <a id="schedulechange--log-only"></a>

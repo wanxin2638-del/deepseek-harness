@@ -14,7 +14,7 @@ Windows 桌面壳（[apps/desktop](../../../../apps/desktop/README.zh.md)，Plan
 
 1. **桥契约**（`apps/desktop/src/bridge/contract.ts` + `preload.cjs`）：单通道 `dsh:desktop-bridge` 承载 `notify({title, body, urgency})`、`flash(until-focus | duration)`、`flashClear()` 与 `windowState()`；main 侧校验 sender 来源（仅 loopback 页面）、载荷形状与长度上限，并拒绝标签样文本。渲染端全局是 `window.desktopBridge`，由 CommonJS preload 暴露（沙箱 preload 只能用 CommonJS —— `src/preload.cjs` 在构建时复制为 `lib/preload.cjs`）。
 2. **闪烁语义**（`FlashController`）：窗口聚焦清除一切闪烁；`until-focus` 无定时器，`duration` 到时自清。新闪烁取代旧闪烁。窗口的 `closed` 事件移除 IPC 处理器、聚焦监听器和待触发的定时器；壳适配器在调用 `flashFrame` 前检查 `isDestroyed()`。清理绑定在 `closed` 上，因为 `close` 可以被取消。
-3. **插件**（`@deepseek-ai/dsh-client-desktop-integration`，web profile 的 `dsh.client` 行）：观测者骑在现有 client 通道上 —— 会话列表 store 取 `completed` 边沿（C1）与 `jobsBySession` 镜像（C4）、挂起交互注册表取审批（C2）、全局 `api-session/error` 转发取失败（C3）。每个动作先过插件 `Config` 策略（来源开关、`unfocusedOnly`、`completionMinDurationMs`、`dedupeWindowMs`、`quietHours`、闪烁时长）；没有 `window.desktopBridge` 时插件在创建任何订阅前短路（普通浏览器不受影响）。
+3. **插件**（`@deepseek-ai/dsh-client-desktop-integration`，web profile 的 `dsh.client` 行）：观测者骑在现有 client 通道上 —— 会话列表 store 取 `completed` 边沿（C1）与 `jobsBySession` 镜像（C4）、挂起交互注册表取所有用户交互（C2）、全局 `api-session/error` 转发取失败（C3）。每个动作先过插件 `Config` 策略（来源开关、`unfocusedOnly`、`completionMinDurationMs`、`dedupeWindowMs`、`quietHours`、闪烁时长）；没有 `window.desktopBridge` 时插件在创建任何订阅前短路（普通浏览器不受影响）。C2 的范围与焦点变化处理记录在[所有挂起用户交互触发桌面提醒](../bug-fix/2026-09-08-all-pending-user-interactions-trigger-desktop-attention.zh.md)中。
 4. **C2 观测挂起交互注册表，不碰 `approval/request` 瀑布** —— `uiSession.pendingInteractions` 是只读全局可观测源，插件与 ui-approval 应答者无需排序关系。
 5. **C3 用全局 `api-session/error` 转发，不用逐会话事件流** —— host 在终态 `agent/error` 时发出；为非活动会话逐个开 `SessionEventStream`（每个都要拉历史页）成本线性放大，不可取。
 6. **Windows toast** 依赖 `create Notification` 前调用 `app.setAppUserModelId`；`Notification.isSupported()` 为假时 `notify` 返回 `false`。
@@ -35,11 +35,11 @@ Windows 桌面壳（[apps/desktop](../../../../apps/desktop/README.zh.md)，Plan
 - 桥契约在包边界处有意重复：`packages/` 不能依赖 `apps/desktop`，所以 `src/client/bridge.ts` 结构上镜像 `apps/desktop/src/bridge/contract.ts`；两者必须同步变化。
 - 同一 web profile 现在在所有环境都带提醒插件；普通浏览器里它按构造 no-op（D6）。
 - 长的失败消息在桥上限之前截断；壳负责校验、插件负责截断。
-- 免打扰时段抑制 toast 与闪烁，包括审批闪烁。
-- 壳在窗口聚焦时自动清除任何闪烁，聚焦的窗口不会一直闪；`until-focus` 是审批路径，插件在挂起项消失时也会显式清除。
+- 免打扰时段抑制 toast 与闪烁，包括挂起交互闪烁。
+- 壳在窗口聚焦时自动清除任何闪烁，聚焦的窗口不会一直闪；`until-focus` 是挂起交互路径，插件在挂起项消失时也会显式清除。
 
 ## 测试
 
 - 桥单元测试（`apps/desktop/tests/`）：请求校验矩阵、来源白名单、闪烁状态机（假定时器）、对 mock 的 `ipcMain` 做分发与销毁断言；CDP 探针脚本（`apps/desktop/scripts/probe-bridge.mjs`）在真实壳里验证渲染端（桥存在、`notify` → `true`、`flash`/`flashClear`/`windowState`）。
-- 插件测试（`packages/client/desktop-integration/tests/`）：在 client 测试运行时（真实 Cordis ctx、真实 ui-session、TestSessions 替身）上断言触发源→桥映射 —— 完成边沿、首次观测基线、仅失焦门控、`completionMinDurationMs`、审批闪烁与释放、失败通知与去重与免打扰、任务转移、无桥 no-op、HMR 销毁移除全部订阅、zh/en 文案键一致。
+- 插件测试（`packages/client/desktop-integration/tests/`）：在 client 测试运行时（真实 Cordis ctx、真实 ui-session、TestSessions 替身）上断言触发源→桥映射 —— 完成边沿、首次观测基线、仅失焦门控、`completionMinDurationMs`、审批／提问／计划评审闪烁与释放、焦点变化补偿、失败通知与去重与免打扰、任务转移、无桥 no-op、HMR 销毁移除全部订阅、zh/en 文案键一致。
 - 门禁：`verify-client-ui-i18n`、`verify-client-packages`、`verify-package-dependencies`、client 聚合 typecheck、翻译配对。

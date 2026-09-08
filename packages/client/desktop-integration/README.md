@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package turns task-state changes into desktop reminders when the Web GUI runs inside the [Windows desktop shell](../../../apps/desktop/README.md): a toast plus a short taskbar flash when a session finishes or a background job settles, a persistent taskbar flash while an approval is pending, and a critical toast when a turn fails. It observes existing client state and events through `ctx.sessions.list`, `ctx.uiSession.pendingInteractions`, and the global `api-session/error` forward; it issues no RPC, adds no session event, and never reaches a model request. Without `window.desktopBridge` (a plain browser) every action is a silent no-op, so shipping this plugin in the web profile is a build-time constant.
+This package turns task-state changes into desktop reminders when the Web GUI runs inside the [Windows desktop shell](../../../apps/desktop/README.md): a toast plus a short taskbar flash when a session finishes or a background job settles, a persistent taskbar flash while any user interaction is pending, and a critical toast when a turn fails. It observes existing client state and events through `ctx.sessions.list`, `ctx.uiSession.pendingInteractions`, and the global `api-session/error` forward; it issues no RPC, adds no session event, and never reaches a model request. Without `window.desktopBridge` (a plain browser) every action is a silent no-op, so shipping this plugin in the web profile is a build-time constant.
 
 ## Table of Contents
 
@@ -25,11 +25,11 @@ This package turns task-state changes into desktop reminders when the Web GUI ru
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount this plugin as a `dsh.client` row in the web profile beside the desktop shell. The shell preload exposes `window.desktopBridge` (notify / flash / window state), and the plugin routes each trigger through it. Where the shell window's focus state matters, the plugin reads the state pushed by the shell; the strategy follows `Config` rows from cordis.yml: source switches (`notifyOnCompleted`, `flashOnApproval`, `notifyOnFailure`, `notifyOnJob`), `unfocusedOnly`, `completionMinDurationMs`, `dedupeWindowMs`, `quietHours`, and the two flash durations.
+Mount this plugin as a `dsh.client` row in the web profile beside the desktop shell. The shell preload exposes `window.desktopBridge` (notify / flash / window state), and the plugin routes each trigger through it. Where the shell window's focus state matters, the plugin reads the state pushed by the shell; the strategy follows `Config` rows from cordis.yml: source switches (`notifyOnCompleted`, `flashOnInteraction`, `notifyOnFailure`, `notifyOnJob`), `unfocusedOnly`, `completionMinDurationMs`, `dedupeWindowMs`, `quietHours`, and the two flash durations.
 
 ### Reminder semantics
 
-A completed-session edge (the sidebar's green "done" mark) sends a normal toast and a short flash. A pending approval flashes the taskbar until the window regains focus; the shell clears the flash on focus. A failed turn (the host `agent/error` forward) sends a critical toast. A background job that reaches `completed`, `failed`, or `killed` sends its own toast. All toasts and flashes are skipped inside `quietHours`, deduped per category and session within `dedupeWindowMs`, and gated by `unfocusedOnly` (the default reminds only while the window is unfocused).
+A completed-session edge (the sidebar's green "done" mark) sends a normal toast and a short flash. A pending approval, question, or plan review flashes the taskbar until the window regains focus or the interaction is settled; the shell clears the flash on focus. If the interaction appears while the window is focused and the user later switches away, the plugin starts the flash on the focus-state transition. A failed turn (the host `agent/error` forward) sends a critical toast. A background job that reaches `completed`, `failed`, or `killed` sends its own toast. All toasts and flashes are skipped inside `quietHours`, deduped per category and session within `dedupeWindowMs`, and gated by `unfocusedOnly` (the default reminds only while the window is unfocused).
 
 -----
 

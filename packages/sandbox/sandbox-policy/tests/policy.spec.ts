@@ -4,20 +4,25 @@
  * override kit (fold + write path) every enforcing capability reads.
  */
 
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import CommandRuntime from '@deepseek-ai/dsh-commands'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import SandboxPolicyService, { SANDBOX_MODES, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt, { renderContextSnapshot, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 
-async function mounted(config: { mode?: 'read-only' | 'workspace-write' | 'danger-full-access'; workspaceRoot?: string } = {}) {
+async function mounted(
+  config: { mode?: 'read-only' | 'workspace-write' | 'danger-full-access'; workspaceRoot?: string } = {},
+  commands = false,
+) {
   const ctx = new Context()
   await ctx.plugin(SessionProjectionRegistry)
+  if (commands) await ctx.plugin(CommandRuntime)
   await ctx.plugin(SandboxPolicyService, config)
   return ctx
 }
@@ -149,10 +154,14 @@ describe('SandboxPolicyService', () => {
 })
 
 describe('sandbox:policy request context', () => {
-  async function promptMounted(config: { mode?: 'read-only' | 'workspace-write' | 'danger-full-access'; workspaceRoot?: string } = {}): Promise<Context> {
+  async function promptMounted(
+    config: { mode?: 'read-only' | 'workspace-write' | 'danger-full-access'; workspaceRoot?: string } = {},
+    commands = false,
+  ): Promise<Context> {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(SessionProjectionRegistry)
+    if (commands) await ctx.plugin(CommandRuntime)
     await ctx.plugin(SandboxPolicyService, config)
     return ctx
   }
@@ -204,6 +213,21 @@ describe('sandbox:policy request context', () => {
     expect(await policyContext(ctx, active)).toBe(`Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: ${JSON.stringify(resolve('/projects/current'))}. Some platform temporary areas may also be writable.`)
   })
 
+  it('renders additional writable roots in the model-visible workspace-write context', async () => {
+    const extra = mkdtempSync(join(tmpdir(), 'dsh-policy-context-extra-'))
+    try {
+      const ctx = await promptMounted({ mode: 'workspace-write' }, true)
+      const active = session('sess-context-extra', '/projects/current')
+      const result = await ctx.commands.execute(agentFor(active), `/sandbox-path add ${extra}`, [], new AbortController().signal)
+      expect(result?.result.kind).toBe('success')
+      expect(await policyContext(ctx, active)).toContain(
+        `Additional authorized directories: [${JSON.stringify(realpathSync.native(extra))}].`,
+      )
+    } finally {
+      rmSync(extra, { recursive: true, force: true })
+    }
+  })
+
   it('reconstructs resumed policy from the session log and omits diagnostics without an agent', async () => {
     const active = session('sess-resume', '/projects/current')
     setSandboxMode(active, 'workspace-write')
@@ -227,6 +251,45 @@ describe('the sandbox/mode session kit', () => {
     setSandboxMode(session, 'workspace-write')
     setSandboxMode(session, 'read-only')
     expect(ctx.sessionProjections.stateOf(session, 'sandboxMode')).toBe('read-only')
+  })
+
+  it('persists additional writable roots per session and carries them into each resolved policy', async () => {
+    const ctx = await mounted({ mode: 'workspace-write', workspaceRoot: '/fallback' }, true)
+    const active = session('sess-extra-root', '/projects/current')
+    const extra = mkdtempSync(join(tmpdir(), 'dsh-policy-extra-'))
+    try {
+      expect(ctx.sessionProjections.stateOf(active, 'sandboxWritableRoots')).toEqual([])
+      const add = await ctx.commands.execute(agentFor(active), `/sandbox-path add ${extra}`, [], new AbortController().signal)
+      expect(add?.result.kind).toBe('success')
+      const canonical = realpathSync.native(extra)
+      expect(ctx.sessionProjections.stateOf(active, 'sandboxWritableRoots')).toEqual([canonical])
+      expect(ctx.sandboxPolicy.resolve({ session: active })).toMatchObject({ extraWritableRoots: [canonical] })
+      expect(active.snapshotEvents().filter(event => event.type === 'sandbox/writable-root')).toHaveLength(1)
+
+      const remove = await ctx.commands.execute(agentFor(active), `/sandbox-path remove ${extra}`, [], new AbortController().signal)
+      expect(remove?.result.kind).toBe('success')
+      expect(ctx.sessionProjections.stateOf(active, 'sandboxWritableRoots')).toEqual([])
+      const missing = await ctx.commands.execute(agentFor(active), `/sandbox-path remove ${extra}`, [], new AbortController().signal)
+      expect(missing?.result.kind).toBe('success')
+    } finally {
+      rmSync(extra, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a relative path and a file as an additional writable root', async () => {
+    const ctx = await mounted({}, true)
+    const active = session('sess-invalid-extra-root')
+    const directory = mkdtempSync(join(tmpdir(), 'dsh-policy-file-'))
+    const file = join(directory, 'file.txt')
+    writeFileSync(file, 'x')
+    try {
+      const relative = await ctx.commands.execute(agentFor(active), '/sandbox-path add relative', [], new AbortController().signal)
+      expect(relative?.result).toMatchObject({ kind: 'error', text: expect.stringMatching(/absolute path/) })
+      const invalid = await ctx.commands.execute(agentFor(active), `/sandbox-path add ${file}`, [], new AbortController().signal)
+      expect(invalid?.result).toMatchObject({ kind: 'error', text: expect.stringMatching(/not a directory/) })
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
   })
 
   it('setSandboxMode appends exactly one sandbox/mode event per switch', () => {

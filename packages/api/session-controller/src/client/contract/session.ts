@@ -8,6 +8,7 @@
  * dispatch) stay on the class, invisible out here.
  */
 import type { AttachmentIdType, FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type { CommandResult } from '@deepseek-ai/dsh-commands/types'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
@@ -143,9 +144,10 @@ export interface ISession {
    * Execute one slash-command line against this session's agent — pure
    * admission semantics (the host executor durably logs the lifecycle).
    * @param line - the full command line, leading slash included.
-   * @returns the admission result, or the Remote face's error branch.
+    * @returns whether the command matched and, when it did, the normalized handler outcome;
+    *   or the Remote face's error branch.
    */
-  command(line: string): Promise<RemoteResult<{ matched: boolean }>>
+  command(line: string): Promise<RemoteResult<{ matched: boolean; result?: CommandResult }>>
 }
 
 /**

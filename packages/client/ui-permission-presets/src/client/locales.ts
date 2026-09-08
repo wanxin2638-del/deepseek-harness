@@ -45,6 +45,17 @@ export const accessZh = {
   'confirm.acknowledge': '我已了解风险，并愿意继续',
   'confirm.cancel': '取消',
   'confirm.enable': '启用完全权限',
+  'roots.title': '额外授权目录',
+  'roots.description': '主工作区已自动授权。添加的目录也拥有完整工具读写权限，其他路径仍按现有规则处理。',
+  'roots.open': '管理额外授权目录',
+  'roots.add': '添加目录',
+  'roots.pick': '选择目录',
+  'roots.pathPlaceholder': '输入绝对目录路径',
+  'roots.cancel': '关闭',
+  'roots.remove': '移除授权目录',
+  'roots.empty': '尚未添加额外目录',
+  'roots.invalid': '请输入目录路径',
+  'roots.failed': '目录授权失败，请检查路径后重试',
 } satisfies Record<string, string>
 
 /** Current-session popup-gate key union. */
@@ -60,4 +71,15 @@ export const accessEn = {
   'confirm.acknowledge': 'I understand the risks and want to continue',
   'confirm.cancel': 'Cancel',
   'confirm.enable': 'Enable Full access',
+  'roots.title': 'Additional authorized directories',
+  'roots.description': 'The session workspace is authorized automatically. Added directories receive full tool read/write access; other paths keep the existing rules.',
+  'roots.open': 'Manage additional authorized directories',
+  'roots.add': 'Add directory',
+  'roots.pick': 'Choose directory',
+  'roots.pathPlaceholder': 'Enter an absolute directory path',
+  'roots.cancel': 'Close',
+  'roots.remove': 'Remove authorized directory',
+  'roots.empty': 'No additional directories',
+  'roots.invalid': 'Enter a directory path',
+  'roots.failed': 'Directory authorization failed; check the path and try again',
 } satisfies Record<PermissionAccessKey, string>

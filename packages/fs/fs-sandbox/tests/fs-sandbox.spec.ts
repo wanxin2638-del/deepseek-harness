@@ -116,6 +116,13 @@ describe('workspace-write containment', () => {
     expect(existsSync(path)).toBe(false)
   })
 
+  it('allows a write under an additional authorized root', async () => {
+    const policy = { mode: 'workspace-write' as const, workspaceRoot: workspace, extraWritableRoots: [outside] }
+    const path = join(outside, 'authorized.txt')
+    await fs.writeText(await target(path), 'authorized', undefined, undefined, policy)
+    expect(await readFile(path, 'utf8')).toBe('authorized')
+  })
+
   it('a `..` traversal out of the workspace is denied', async () => {
     const path = join(workspace, '..', 'sibling-escape.txt')
     await expect(fs.writeText(await target(path), 'x')).rejects.toMatchObject({ code: 'FS_SANDBOX_DENIED' })

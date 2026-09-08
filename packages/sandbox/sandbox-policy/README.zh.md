@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-sandbox-policy` 为每次受限能力调用从统一的策略归属位置解析文件效果模式与工作区根目录，并在每次请求前把当前策略告知模型。部署方设置默认模式与回退工作区根目录；会话可以切换自己的模式，切换因存在于会话日志中而跨重启保留。每个强制执行能力——bash、文件系统、终端——读取同一份解析出的策略，因此调用运行的模式绝不取决于由哪个家族解析。模型会看到一条简洁的 `sandbox:policy` 贡献，指明模式与工作区，而不会收到一份已挂载能力的清单。
+`dsh-sandbox-policy` 为每次受限能力调用从统一的策略归属位置解析文件效果模式、工作区根目录与会话维护的额外可写根目录，并在每次请求前把当前策略告知模型。部署方设置默认模式与回退工作区根目录；会话可以切换自己的模式或增删额外目录授权，这些事实因存在于会话日志中而跨重启保留。每个强制执行能力——bash、文件系统、终端——读取同一份解析出的策略，因此调用可访问的目录绝不取决于由哪个家族解析。模型会看到一条简洁的 `sandbox:policy` 贡献，指明模式、工作区与额外目录，而不会收到一份已挂载能力的清单。
 
 ## 目录
 
@@ -51,7 +51,7 @@ kind: "package-reference"
 
 ### 切换会话模式
 
-会话的模式可以在运行时通过 UI 策略控件或显式切换来更改；切换记录在会话日志中，并在该会话的下一次受限调用时生效。切换通过回放跨重启保留，每个会话保持自己的模式——两个会话绝不会看到彼此状态。切换后的会话继续以不可变的工作区 cwd 作为写入边界。
+会话的模式可以在运行时通过 UI 策略控件或显式切换来更改；切换记录在会话日志中，并在该会话的下一次受限调用时生效。同一会话还可以通过 `/sandbox-path` 命令或 Web 目录编辑器维护额外可写目录。这些授权通过回放跨重启保留，每个会话保持自己的模式与目录——两个会话绝不会看到彼此状态。
 
 ### 失败与恢复
 
@@ -69,22 +69,23 @@ kind: "package-reference"
 
 ### 解析优先级
 
-`resolve({ session, mode })` 返回一份完整的逐调用策略：已批准的显式模式优先于会话最后一条 `sandbox/mode` 事件，后者又优先于部署默认值。会话的不可变 `cwd` 先按文件系统语义规范化，再成为工作区根目录，因此 `symlink/..` 与进程工作目录解析一致；否则使用配置的回退值。
+`resolve({ session, mode })` 返回一份完整的逐调用策略：已批准的显式模式优先于会话最后一条 `sandbox/mode` 事件，后者又优先于部署默认值；会话的 `sandbox/writable-root` fold 提供额外根目录。会话不可变的 `cwd` 与每个添加的目录都按文件系统语义规范化，因此 `symlink/..` 与进程工作目录解析一致；否则使用配置的回退值。
 
 ### 逐会话存储
 
-运行时切换是在对应会话日志中追加的一条仅记录 `sandbox/mode` 事件——切换本身就是事件，任何机制都不会在带外修改模式状态。`effective = explicit grant ?? fold(events) ?? deployment default`，因此覆盖通过回放跨重启保留，两个会话也绝不会看到彼此状态。工作区标识无需事件：创建时记录的不可变 `SessionHeader.cwd` 是该会话每次调用使用的根。事件仍只进入日志；在每次请求前，归属方会把当前事实贡献给完整运行时上下文快照，agent loop（智能体循环）将该快照记录为一条带来源的 `user/message`。
+运行时模式切换是在对应会话日志中追加的一条仅记录 `sandbox/mode` 事件，每次额外目录变化则追加一条仅记录 `sandbox/writable-root` 事件——任何机制都不会在带外修改策略状态。`effective = explicit grant ?? fold(events) ?? deployment default`，因此模式覆盖与目录授权通过回放跨重启保留，两个会话也绝不会看到彼此状态。工作区标识无需事件：创建时记录的不可变 `SessionHeader.cwd` 是该会话每次调用使用的主要根。每次请求前，归属方会把当前模式与额外根目录贡献给完整运行时上下文快照，agent loop（智能体循环）将该快照记录为一条带来源的 `user/message`。
 
 ### 模型可见文本
 
-`sandbox:policy` 贡献说明模式的与具体能力无关的文件操作约定，以及 `workspace-write` 下规范化的会话工作区。它不枚举已挂载能力；工具插件保留特定于操作的拒绝与升权引导，批准策略单独贡献给同一份快照，计划引导仍由 `dsh-plan-mode` 的系统段落管理。可选的 `./invariant` 配套组件会拒绝值超出封闭模式词汇的伪造持久 `sandbox/mode` 事件。
+`sandbox:policy` 贡献说明模式的与具体能力无关的文件操作约定、规范化的会话工作区，以及 `workspace-write` 下的额外授权目录。它不枚举已挂载能力；工具插件保留特定于操作的拒绝与升权引导，批准策略单独贡献给同一份快照，计划引导仍由 `dsh-plan-mode` 的系统段落管理。可选的 `./invariant` 配套组件会拒绝模式或可写根目录事件中的无效值。
 
 ### 源码地图
 
 | 文件 | 职责 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：`SandboxPolicyService`、`Config` schema、策略解析与上下文贡献 |
-| [`src/session-mode.ts`](src/session-mode.ts) | `sandbox/mode` 事件、其 fold 与写入路径 |
+| [`src/session-mode.ts`](src/session-mode.ts) | `sandbox/mode` 与 `sandbox/writable-root` 事件、其 fold 与写入路径 |
+| [`src/types.ts`](src/types.ts) | 会话维护的额外可写根目录纯 projection 类型 |
 | [`src/invariant.ts`](src/invariant.ts) | 不变式伴生插件：拒绝超出封闭词汇的 `sandbox/mode` 值 |
 
 </details>
@@ -122,7 +123,7 @@ Current DSH file policy: read-only. Any available operation enforced by the DSH 
 ##### 工作区写入
 
 ```markdown
-Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: "<workspace root>". Some platform temporary areas may also be writable.
+Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: "<workspace root>". Additional authorized directories: ["<extra root>"]. Some platform temporary areas may also be writable.
 ```
 
 ##### 完全访问
@@ -133,7 +134,7 @@ Current DSH file policy: danger-full-access. The DSH file sandbox does not restr
 
 #### Token 影响
 
-首次请求和有效策略每次变化时增加一条简洁的持久上下文消息；未变化的请求不增加内容。`workspace-write` 只携带规范化的会话工作区路径；平台特定的临时路径会以摘要表述，不会加入依赖主机的字节。
+首次请求和有效策略每次变化时增加一条简洁的持久上下文消息；未变化的请求不增加内容。`workspace-write` 携带规范化的会话工作区路径与额外授权目录；平台特定的临时路径会以摘要表述，不会加入依赖主机的字节。
 
 #### KV Cache 影响
 
@@ -146,7 +147,7 @@ Current DSH file policy: danger-full-access. The DSH file sandbox does not restr
 
 这些限制定义了本包提供的策略表面。它们是当前包约束，不是通用沙箱对比或任务积压。
 
-- **每个会话只有一个主要工作区根目录**——策略解析 `SessionHeader.cwd`；额外可写根目录不属于 `SandboxExecutionPolicy`。
+- **额外根目录按会话保存**——主要的 `SessionHeader.cwd` 始终是工作区根目录，`/sandbox-path` 只为当前 Session 添加已存在的规范化目录。
 - **仅限文件操作模式**——`SandboxMode` 管控文件操作；网络和进程策略不在其词汇中，因此这里没有限制它们的旋钮。
 - **有意概述临时区域**——强制执行后端会授予不同的平台临时区域，这些区域在策略解析后才会选定，因此无法在当前上下文中如实枚举。
 

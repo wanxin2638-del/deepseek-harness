@@ -10,14 +10,14 @@
 
 ## 1. 背景与目标
 
-Plan 1 落地后，桌面端在功能上等价于"自带浏览器的 dsh web"。本计划补上桌面端独有的价值：**任务状态变化 → 用户可见提醒**，包括 Windows 通知（toast）与任务栏闪烁。触发源不止审批（现状只有浏览器内 composer 接管，见 §4 事实 G2），而是产品事件面的一个完整子集。
+Plan 1 落地后，桌面端在功能上等价于"自带浏览器的 dsh web"。本计划补上桌面端独有的价值：**任务状态变化 → 用户可见提醒**，包括 Windows 通知（toast）与任务栏闪烁。触发源覆盖用户交互与任务结果（现状由浏览器内 composer 接管用户交互，见 §4 事实 G2），构成产品事件面的一个完整子集。
 
 目标能力（按价值排序）：
 
 | # | 能力 | 触发源 | 用户价值 |
 |---|---|---|---|
 | C1 | 任务完成提醒 | 会话 running→idle 边沿（侧边栏"完成"标记同源信号） | 窗口失焦时也能知道跑完了 |
-| C2 | 审批挂起闪烁 | `approval/request`（当前**无**任何 OS 提醒） | 批准/拒绝前不被漏掉 |
+| C2 | 用户交互挂起闪烁 | `uiSession.pendingInteractions`（当前**无**任何 OS 提醒） | 用户回答前不被漏掉 |
 | C3 | 失败/放弃提醒 | `assistant/attempt` 终态失败/取消 | 不用盯着等结果 |
 | C4 | 后台任务/工作流/子代理完成 | jobs mirror、workflow、subagent delegation | 长任务完成通知 |
 | C5 | 后端异常 | 壳级：子进程意外退出/重启 | 进程崩了用户知道 |
@@ -41,7 +41,7 @@ Plan 1 落地后，桌面端在功能上等价于"自带浏览器的 dsh web"。
 ┌─ web profile Cordis tree (plugin layer, product behavior) ──────────────┐
 │  dsh-desktop-integration/client (dsh.client row)                        │
 │  · subscribes ctx.sessions (C1: completed edge + title projection)        │
-│  · subscribes the approval client channel (C2)                            │
+│  · subscribes the pending-interaction registry (C2)                       │
 │  · subscribes SessionEventStream's assistant/attempt (C3)                 │
 │  · subscribes the jobs mirror (C4)                                        │
 │  · policy: source switches / unfocused-only / min run duration / dedup    │
@@ -87,10 +87,10 @@ interface DesktopBridge {
 - **订阅面**：`service.ts:191` `readonly list: SnapshotStore<SessionListState>`；`projectList()`（`:577-647`）把 `completed` 写进 store 行（`:589`），`jobsBySession` 同快照（`:645`）；`service.ts:263` `rootCtx.reflect.provide('sessions', this, undefined)` → 任何 client 插件可 `ctx.sessions.list.subscribe()` + `getSnapshot()`（SnapshotStore 语义：`packages/client/store/src/index.ts:26-38,103-136`；list store 为 sync flush，`set` 整值替换）。
 - **C1 直接订阅 sessions 列表 store，看 `completed` false→true 边沿即可，无需重算**；标题用行内 `title`（durable projection，`service.ts:587-596`）。
 
-**G2 · 审批的观测口是「挂起交互」注册表，不是 approval/request 瀑布** — `packages/client/ui-approval` + `packages/client/ui-session`
-- `PendingApproval`（`ui-approval/src/client/contract/slots.ts:69-160`）：kind 字面量 `'approval'`（`:71,95`）、key `approval:<n>`，`result` 在 answer/delegate/abort 时定局（`:122-150`）；`answerApproval`（`ui-approval/src/client/index.ts:35-68`）在 finally 移除挂起项（`:64-67`）。
-- **观测通道**：`ctx.uiSession.pendingInteractions`（`ui-session/src/client/index.ts:225-231`）——`HostObservable<ReadonlyMap<SessionId, PendingInteraction>>`，全域只读、发布即通知（`:366-386`）；`registerPendingInteraction`（`:304-323`）注册各域。**不注入 `approval/request` 瀑布**（`ui-approval/src/client/index.ts:90-92`）——避免与 ui-approval 应答监听器顺序耦合。
-- **C2 订阅 pendingInteractions，`kind === 'approval'` 项出现 → `flash until-focus`，消失（已处理/放弃/失效）→ 清除。**
+**G2 · 用户交互的观测口是挂起交互注册表，不是任何应答瀑布** — `packages/client/ui-approval` + `packages/client/ui-user-questions` + `packages/client/ui-session`
+- `PendingApproval`（`ui-approval/src/client/contract/slots.ts:69-160`）发布 kind `'approval'`；`PendingQuestion`（`ui-user-questions/src/client/contract/slots.ts:109-190`）发布 kind `'question'` 或 `'plan-review'`。各发布方在回答、委托、取消或中止后移除挂起项。
+- **观测通道**：`ctx.uiSession.pendingInteractions`（`ui-session/src/client/index.ts:225-231`）——`HostObservable<ReadonlyMap<SessionId, PendingInteraction>>`，全域只读、发布即通知（`:366-386`）；`registerPendingInteraction`（`:304-323`）注册各域。桌面插件不注入任何应答瀑布，因此观测不依赖应答者顺序。
+- **C2 订阅 pendingInteractions：任意项出现 → `flash until-focus`；消失（已处理／放弃／失效）→ 清除。交互在窗口聚焦时出现、之后窗口失焦时，焦点状态变化会重新检查该挂起项。**
 
 **G3 · 失败有现成全局转发事件，无需逐会话开流** — `packages/api/session-controller/src`
 - Host 端：`src/index.ts:148-150` `ctx.on('agent/error', ({agent,error}) => ctx.emit('api-session/error', agent.id, errorChain(error)))`——`agent/error` 是终态 Agent 失败（重试是循环内部行为，不触发）；`:171` 后台激活失败同样转发。
@@ -117,7 +117,7 @@ interface DesktopBridge {
 | D1 | 感知层位置 | **client 插件**（`dsh.client` 行），进 web profile；不 fork 任何官方 bundle，用 profile 的 `cordis.patch.yml`（home 层热重载）或 overlay bundle 插行 | 一切皆插件；G1 |
 | D2 | 桥只给原语 | main 不含任何产品语义，只有 notify/flash/windowState | 壳是宿主（Plan 1 §2） |
 | D3 | C1 判定信号 | 直接用 `completed` 边沿（G1），不在壳里轮询、不重算 | G1；避免重复实现 |
-| D4 | C2 闪烁语义 | `flash({kind:'until-focus'})`：**闪烁持续到用户处理审批**；窗口聚焦才清；C1/C3/C4 用 `duration` 型闪烁+通知 | 审批不可错过，完成通知一次即可 |
+| D4 | C2 闪烁语义 | `flash({kind:'until-focus'})`：**闪烁持续到用户处理挂起交互**；窗口聚焦才清；C1/C3/C4 用 `duration` 型闪烁+通知 | 需要用户回答的事项不可错过，完成通知一次即可 |
 | D5 | 免打扰 | 插件 `Config` 提供 `quietHours`（可配）；生效期间 notify 返回 false、flash 不做 | 策略可配置原则 |
 | D6 | 无桥降级 | `window.desktopBridge` 缺失 → 插件 no-op；同一 web profile 在普通浏览器仍可运行 | 双环境一致 |
 | D7 | 文案 | 通知标题/正文入 locale dictionary，走 `t()` | locale-owned 规则 |
@@ -129,7 +129,7 @@ interface DesktopBridge {
 ### P2.0 契约调研（只读）
 - 写路径：仅本文件（§4 事实表回填）。
 - 复核清单：
-  1. G2：`ui-approval` 订阅 `approval/request` 的**客户端精确 API**（scoped Remote 形态、store/channel 名），确认 client 插件可注入同等通道；确认"审批挂起中"的判定状态。
+  1. G2：判断用户交互挂起状态的**客户端精确 API**，包括审批与提问载体；确认 client 插件无需注入应答瀑布即可观察共享注册表。
   2. G3：`assistant/attempt` 事件载荷的终态判别字段（failed/retried/cancelled），确认重试中不误报的过滤条件；SessionEventStream 对非活动会话的订阅成本。
   3. G4：jobs mirror / workflow / subagent 的客户端订阅 API 与完成判定。
   4. G5：settings domain 新增一个 namespace 的最小改动面（settings-file + api-settings-controller + ui-settings 行）。
@@ -142,7 +142,7 @@ interface DesktopBridge {
 - 写路径：`apps/desktop/src/main.ts` 的 IPC 处理、`apps/desktop/src/preload.ts`。
 - 要点：
   - 按 §3 桥契约实现；`contextBridge` + `contextIsolation: true`；payload 校验（长度、枚举、拒绝 HTML）；sender 白名单（仅 `http://127.0.0.1:*`）。
-  - main 侧：`Notification`（Windows toast，`app.setAppUserModelId` 保证 toast 归属）、`win.flashFrame`、窗口 `focus`/`minimize`/`blur` 状态推送、`flashClear` 与窗口聚焦联动（C2 的 until-focus 除外）。
+  - main 侧：`Notification`（Windows toast，`app.setAppUserModelId` 保证 toast 归属）、`win.flashFrame`、窗口 `focus`/`minimize`/`blur` 状态推送，以及 `flashClear` 与窗口聚焦联动。
   - 单测：IPC 校验与状态机用 mock 的 BrowserWindow/Notification 覆盖；真机行为 P2.5。
 - 验收：dev 壳里 `window.desktopBridge` 存在且 `notify` 能弹 toast、`flash` 能闪任务栏；非法 payload 被拒；非 loopback sender 被拒。
 - 风险：Windows toast 依赖 `app.setAppUserModelId` 与 `Notification.isSupported()` 探测；不支持时 `notify` 返回 false。
@@ -150,14 +150,14 @@ interface DesktopBridge {
 ### P2.2 client 插件实现（感知 + 策略）
 - 写路径：`packages/client/desktop-integration/`（新包，P2.0 结论：独立 workspace 包）或 `apps/desktop/plugins/`。
 - 要点：
-  - 订阅：`ctx.sessions` 列表（C1，`completed` 边沿 + `title` projection）、approval 通道（C2）、`SessionEventStream`（C3，终态失败/取消）、jobs mirror（C4）。
+  - 订阅：`ctx.sessions` 列表（C1，`completed` 边沿 + `title` projection）、挂起交互注册表（C2）、`SessionEventStream`（C3，终态失败/取消）、jobs mirror（C4）。
   - 策略：来源开关 / 仅失焦 / `completionMinSeconds` / 去重窗口 / `quietHours`，全部 `Config` 字段。
   - 桥调用：`window.desktopBridge` 缺失 no-op；文案经 `t()`。
   - 生命周期：`ctx.effect()` 注册/退订；HMR 安全。
   - 无模型可见输入：不新增 session event。
 - 验收：REAL-composition 测试（Loader 起 web profile + 注入 fake bridge）断言各触发源到桥调用的映射；无桥时零调用；HMR dispose 后订阅移除；`verify-client-ui-i18n` 通过。
-- 结果：`packages/client/desktop-integration`（`@deepseek-ai/dsh-client-desktop-integration`）落地；C1/C2/C3/C4 全部经 client test runtime 的行为测试（16 例）验证，含 no-bridge no-op 与 HMR 订阅移除；`verify-client-ui-i18n` / `verify-client-packages` / `verify-package-dependencies` 通过；随附 Agent Note 记录桥与提醒决策。
-- 风险：approval/jobs 订阅 API 与 P2.0 结论不符 → 回填事实表并调整。
+- 结果：`packages/client/desktop-integration`（`@deepseek-ai/dsh-client-desktop-integration`）落地；C1/C2/C3/C4 全部经 client test runtime 的行为测试（18 例）验证，含 approval/question/plan-review 覆盖、焦点变化补偿、no-bridge no-op 与 HMR 订阅移除；`verify-client-ui-i18n` / `verify-client-packages` / `verify-package-dependencies` 通过；随附 Agent Note 记录桥与提醒决策。
+- 风险：挂起交互/jobs 客户端订阅 API 与 P2.0 结论不符 → 回填事实表并调整。
 
 ### P2.3 桌面壳内联（打包集成）
 - 写路径：`apps/desktop` 装配/打包配置（插件进 dsh-runtime 闭包 + profile patch 插行）。
@@ -176,7 +176,7 @@ interface DesktopBridge {
 - 写路径：`docs/plans/notes/verification-integration.md`（新建）。
 - 清单：
   1. C1：窗口最小化 → 会话跑完 → toast + 短暂闪烁；聚焦状态不打扰。
-  2. C2：窗口切走 → 审批挂起 → 任务栏持续闪烁；回到窗口处理后停止。
+  2. C2：提问、计划评审或审批挂起 → 窗口切走 → 任务栏持续闪烁；回到窗口处理后停止。
   3. C3：工具终态失败 → 失败通知；重试中不通知。
   4. C4：后台 job 完成 → 通知。
   5. 免打扰时段：不通知不闪。
@@ -206,7 +206,7 @@ interface DesktopBridge {
 
 | 风险 | 影响 | 缓解 |
 |---|---|---|
-| approval/jobs 客户端订阅 API 与预期不符 | C2/C4 延迟 | P2.0 前置调研，回填事实表 |
+| 挂起交互/jobs 客户端订阅 API 与预期不符 | C2/C4 延迟 | P2.0 前置调研，回填事实表 |
 | Windows toast 支持差异（无 AppUserModelID / 不支持） | C1/C3/C4 通知失效 | `Notification.isSupported()` + AppUserModelID + P2.1 探测；闪缩仍可用 |
 | 通知 spam（长会话多 session 完成） | 体验差 | 去重窗口 + 仅失焦 + 最短时长（Config） |
 | 插件在普通浏览器产生差异 | 双环境行为漂移 | 无桥 no-op（D6）统一验证 P2.5-6 |

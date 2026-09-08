@@ -1,6 +1,7 @@
 /** Package-owned session-event invariants for sandbox policy. @module @deepseek-ai/dsh-sandbox-policy/invariant */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { isAbsolute } from 'node:path'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 import { SANDBOX_MODES } from './session-mode.ts'
@@ -17,6 +18,12 @@ export const inject = ['invariants']
 function validateEvent(event: SessionEvent, fail: InvariantFailure): void {
   if (event.type === 'sandbox/mode' && !SANDBOX_MODES.includes(event.data.mode)) {
     fail(`sandbox/mode carries unknown mode ${JSON.stringify(event.data.mode)}`)
+  }
+  if (event.type === 'sandbox/writable-root'
+    && (event.data.action !== 'add' && event.data.action !== 'remove'
+      || event.data.path.trim().length === 0
+      || !isAbsolute(event.data.path))) {
+    fail('sandbox/writable-root carries an invalid action or empty path')
   }
 }
 

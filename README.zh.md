@@ -72,6 +72,42 @@ node apps/desktop/node_modules/electron/install.js
 
 安装命令按现有锁文件恢复依赖；第二条命令确保 Electron 可执行文件可用。仅在依赖缺失时执行这些恢复命令。
 
+## 从全新检出开始构建、启动与打包
+
+在 Windows PowerShell 中，从仓库根目录执行下面的命令完成桌面应用的全新配置。根目录的 `build` 命令会构建 Host、Client 与 Web 产物；`assemble` 会暂存桌面壳所需的后端闭包与独立 Node 运行时。
+
+### 从零构建并启动
+
+```powershell
+pnpm install --config.confirmModulesPurge=false
+pnpm --filter @deepseek-ai/dsh-desktop build
+pnpm run build
+pnpm --filter @deepseek-ai/dsh-desktop assemble
+pnpm --config.verify-deps-before-run=false --filter @deepseek-ai/dsh-desktop start
+```
+
+如果安装后仍缺少 `apps\desktop\node_modules\electron\dist\electron.exe`，在 `apps\desktop` 目录执行一次下面的命令，然后返回仓库根目录：
+
+```powershell
+node node_modules\electron\install.js
+```
+
+### 从零构建便携式可执行文件
+
+先完成构建与暂存，再执行便携式可执行文件打包：
+
+```powershell
+pnpm install --config.confirmModulesPurge=false
+pnpm --filter @deepseek-ai/dsh-desktop build
+pnpm run build
+pnpm --filter @deepseek-ai/dsh-desktop assemble
+$env:CI='true'
+$env:npm_config_ignore_scripts='true'
+pnpm --filter @deepseek-ai/dsh-desktop dist
+```
+
+`CI` 与 `npm_config_ignore_scripts` 会让 Electron Builder 内部的生产依赖安装在非交互模式下运行，并避免生产依赖裁剪后再次执行根目录开发依赖的 postinstall hook。打包后的可执行文件写入 `apps\desktop\release\`。`.runtime\`、`.runtime-node\`、`.runtime-pack\` 与 `release\` 都是本机生成的构建产物，全新检出后需要重新生成。
+
 ## 社区与支持
 
 - 通过 [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions) 提交反馈或 bug 报告。

@@ -365,7 +365,7 @@ export class LocalSandboxProvider extends SandboxProvider {
         '--mode', policy.mode,
       ]
     }
-    const temp = this.materializeAclGrant(sessionId, policy.workspaceRoot)
+    const temp = this.materializeAclGrant(sessionId, policy.workspaceRoot, policy.extraWritableRoots ?? [])
     return [
       ...this.windowsAclRunnerInvocation(),
       '--workspace', policy.workspaceRoot,
@@ -387,12 +387,19 @@ export class LocalSandboxProvider extends SandboxProvider {
    * removed before the error propagates.
    * @param sessionId - the policy's calling-session identity.
    * @param workspaceRoot - the resolved policy root.
+   * @param extraWritableRoots - additional roots sharing the workspace write SID.
    * @returns the pair's private temp directory and write capability.
    */
-  private materializeAclGrant(sessionId: SessionId, workspaceRoot: string): AclTempCapability {
-    assertTempRootOutsideWorkspace(workspaceRoot, tmpdir())
+  private materializeAclGrant(
+    sessionId: SessionId,
+    workspaceRoot: string,
+    extraWritableRoots: readonly string[],
+  ): AclTempCapability {
+    const writableRoots = [workspaceRoot, ...extraWritableRoots]
+    for (const root of writableRoots) assertTempRootOutsideWorkspace(root, tmpdir())
     const writeSid = workspaceWriteSid(workspaceRoot)
-    if (!this.workspaceGrants.has(workspaceRoot)) {
+    let workspaceGrant = this.workspaceGrants.get(workspaceRoot)
+    if (workspaceGrant === undefined) {
       const grant = AclWriteGrant.create(writeSid)
       try {
         grant.add(workspaceRoot, true)
@@ -408,6 +415,21 @@ export class LocalSandboxProvider extends SandboxProvider {
         throw error
       }
       this.workspaceGrants.set(workspaceRoot, grant)
+      workspaceGrant = grant
+    }
+    try {
+      for (const root of extraWritableRoots) {
+        if (workspaceGrant.paths.includes(root)) continue
+        workspaceGrant.add(root, true)
+      }
+    } catch (error) {
+      this.workspaceGrants.delete(workspaceRoot)
+      try {
+        workspaceGrant.dispose()
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], 'sandbox-local windows-acl extra workspace grant failed and its cleanup also failed')
+      }
+      throw error
     }
     const key = JSON.stringify([String(sessionId), workspaceRoot])
     const existing = this.tempCapabilities.get(key)

@@ -41,11 +41,29 @@ async function bench() {
   locale.setLocale('en')
   ctx.provide('locale', locale)
   const settingsRemote = scriptedSettingsRemote()
-  const remote = new TestRemote(ctx, { settings: settingsRemote.settings })
+  const remote = new TestRemote(ctx, {
+    settings: settingsRemote.settings,
+    directoryPicker: { pick: () => Promise.resolve({ ok: true as const, value: null }) },
+  })
   ctx.slots.register({
     name: 'root',
     children: {
+      conversation: { kind: 'single', scope: 'root' },
       'settings.general.item': { kind: 'list', scope: 'root' },
+    },
+  } as never, () => null)
+  ctx.slots.register({
+    name: 'conversation',
+    children: { 'conversation.session': { kind: 'single', scope: 'session' } },
+  } as never, () => null)
+  ctx.slots.register({
+    name: 'conversation.session',
+    children: { 'conversation.session.header': { kind: 'single', scope: 'session' } },
+  } as never, () => null)
+  ctx.slots.register({
+    name: 'conversation.session.header',
+    children: {
+      'conversation.session.header.tabs.trailing': { kind: 'list', scope: 'session' },
     },
   } as never, () => null)
   await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()

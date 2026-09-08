@@ -35,6 +35,15 @@ declare module '@deepseek-ai/dsh-session/types' {
       /** Marks an override seeded into a child at delegation. */
       source?: 'delegation'
     }
+    /**
+     * A user-maintained additional directory root for this Session.
+     * @param action - adds or removes the canonical directory root.
+     * @param path - canonical absolute directory path.
+     */
+    'sandbox/writable-root': {
+      action: 'add' | 'remove'
+      path: string
+    }
   }
 }
 
