@@ -48,14 +48,13 @@ The Models page exposes only what a route needs to exist: the API key, display n
 
 ### OpenCode Go session header
 
-OpenCode Go requires `x-opencode-session` on model requests. Add `sessionHeader` to its provider profile so the adapter sends the current conversation's session id; do not use a fixed value in `headers`, because concurrent conversations would share one routing id:
+OpenCode Go requires `x-opencode-session` on model requests. The built-in `opencode-go` route sets this `sessionHeader` automatically, so no extra settings entry is needed. Set it only when a custom route requires a different field name; do not use a fixed value in `headers`, because concurrent conversations would share one routing id:
 
 ```yaml
 llm-pi-ai:
   providers:
     opencode-go:
       apiKeyEnv: OPENCODE_API_KEY
-      sessionHeader: x-opencode-session
 ```
 
 The dynamic header remains stable across requests in one conversation and changes for another. The setting applies to model requests; model discovery has no conversation session and does not send it.

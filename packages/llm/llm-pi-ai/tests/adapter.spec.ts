@@ -44,12 +44,16 @@ class MappedFileSystem extends Service {
   }
 }
 
-async function harness(baseURL: string, overrides: Record<string, unknown> = {}): Promise<Context> {
+async function harness(
+  baseURL: string,
+  overrides: Record<string, unknown> = {},
+  provider = 'deepseek',
+): Promise<Context> {
   vi.stubEnv('PI_TEST_KEY', 'test-key')
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(LlmPiAi, {
-    providers: { deepseek: { apiKeyEnv: 'PI_TEST_KEY', baseURL, ...overrides } },
+    providers: { [provider]: { apiKeyEnv: 'PI_TEST_KEY', baseURL, ...overrides } },
   })
   return ctx
 }
@@ -135,6 +139,20 @@ describe('PiAiAdapter provider routing', () => {
 
     expect(server.headers.map(headers => headers['x-opencode-session']))
       .toEqual(['first-session', 'second-session'])
+  })
+
+  it('sends the current session id through OpenCode Go\'s default dynamic session header', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = await harness(server.url, {}, 'opencode-go')
+
+    await assemble(ctx, {
+      provider: 'opencode-go',
+      model: 'deepseek-v4-flash',
+      messages: [],
+      sessionId: 'opencode-session' as never,
+    })
+
+    expect(server.headers[0]?.['x-opencode-session']).toBe('opencode-session')
   })
 
   it('forwards common stream options and profile reasoning', async () => {
@@ -862,6 +880,13 @@ describe('provider profile lifecycle', () => {
   it.each(['', 'bad header name', 'x\r\nheader'])('rejects invalid dynamic session header %j', (name) => {
     expect(() => resolveProfiles({ openai: { sessionHeader: name } }))
       .toThrow(`provider "openai" sessionHeader "${name}" is not valid for Fetch`)
+  })
+
+  it('defaults OpenCode Go to its required dynamic session header while allowing an explicit override', () => {
+    expect(resolveProfiles({ 'opencode-go': {} }).get('opencode-go')?.sessionHeader)
+      .toBe('x-opencode-session')
+    expect(resolveProfiles({ 'opencode-go': { sessionHeader: 'x-custom-session' } }).get('opencode-go')?.sessionHeader)
+      .toBe('x-custom-session')
   })
 
   it.each(['maxRetries', 'maxRetryDelayMs'] as const)(

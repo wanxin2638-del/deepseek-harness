@@ -75,6 +75,11 @@ export const DEFAULT_MAX_TOKENS = 32_768
  */
 export const DEFAULT_INPUT: readonly PiAiModality[] = ['text']
 
+/** Provider-specific session headers required by an installed provider protocol. */
+const PROVIDER_SESSION_HEADERS: Readonly<Record<string, string>> = {
+  'opencode-go': 'x-opencode-session',
+}
+
 export type {
   PiAiCompatProfile,
   PiAiModality,
@@ -146,7 +151,7 @@ export interface PiAiProviderProfile {
   defaultInput?: PiAiModality[]
   /** Provider request headers, validated against Fetch when the profile resolves; Harness attribution wins reserved names. */
   headers?: Record<string, string>
-  /** Header that receives the current request session id on each request. */
+  /** Header that receives the current request session id on each request; `opencode-go` defaults to `x-opencode-session`. */
   sessionHeader?: string
   /** Provider-neutral pi-ai reasoning level. */
   reasoning?: ModelThinkingLevel
@@ -430,8 +435,9 @@ export function resolveProfiles(
     if (source.displayName !== undefined && source.displayName.length === 0) {
       throw new Error(`llm-pi-ai: provider "${provider}" has an empty displayName`)
     }
+    const sessionHeader = source.sessionHeader ?? PROVIDER_SESSION_HEADERS[provider]
     assertValidHeaders(provider, source.headers)
-    assertValidSessionHeader(provider, source.sessionHeader)
+    assertValidSessionHeader(provider, sessionHeader)
     const streamIdleTimeoutMs = source.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
     if (!Number.isFinite(streamIdleTimeoutMs)
       || streamIdleTimeoutMs <= 0
@@ -476,12 +482,20 @@ export function resolveProfiles(
       defaultContextWindow: source.defaultContextWindow ?? DEFAULT_CONTEXT_WINDOW,
       defaultMaxTokens: source.defaultMaxTokens ?? DEFAULT_MAX_TOKENS,
     })
-    const { apiKeyEnv, retryPolicy, models: _models, displayName: _displayName, ...rest } = source
+    const {
+      apiKeyEnv,
+      retryPolicy,
+      models: _models,
+      displayName: _displayName,
+      sessionHeader: _sessionHeader,
+      ...rest
+    } = source
     resolved.set(provider, {
       ...rest,
       provider,
       displayName,
       ...apiKeyEnv === undefined ? {} : { apiKeyEnv: credentialRef(apiKeyEnv) },
+      ...sessionHeader === undefined ? {} : { sessionHeader },
       streamIdleTimeoutMs,
       maxRequestImageBytes,
       requestImagePixelBudget,

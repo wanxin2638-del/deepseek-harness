@@ -48,14 +48,13 @@ Provider ID 是永久的，因为请求、已保存会话、模型默认值和�
 
 ### OpenCode Go 会话标头
 
-OpenCode Go 要求模型请求携带 `x-opencode-session`。请在其提供方 profile 中添加 `sessionHeader`，让适配器发送当前会话的 session id；不要在 `headers` 中使用固定值，否则并发会话会共用一个路由 id：
+OpenCode Go 要求模型请求携带 `x-opencode-session`。内置的 `opencode-go` 路由会自动设置这个 `sessionHeader`，因此无需额外添加设置项。只有自定义路由要求使用其他字段名时才需要设置它；不要在 `headers` 中使用固定值，否则并发会话会共用一个路由 id：
 
 ```yaml
 llm-pi-ai:
   providers:
     opencode-go:
       apiKeyEnv: OPENCODE_API_KEY
-      sessionHeader: x-opencode-session
 ```
 
 动态标头在同一会话的请求之间保持稳定，在另一会话中使用不同值。该设置作用于模型请求；模型发现没有会话上下文，因此不会发送该标头。
