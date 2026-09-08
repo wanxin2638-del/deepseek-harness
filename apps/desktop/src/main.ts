@@ -99,7 +99,11 @@ function createWindow(): void {
   win.webContents.openDevTools()
 }
 
-/** Install the desktop bridge (Platform 2 primitives) and push window-state transitions to the page. */
+/**
+ * Install the desktop bridge and push window-state transitions to the page.
+ * Cleanup runs after window destruction; native flash calls require a live window.
+ * @param win - window that owns the bridge and its listeners.
+ */
 function installWindowBridge(win: BrowserWindow): void {
   const pushState = () => {
     if (win.webContents.isDestroyed()) return
@@ -115,7 +119,9 @@ function installWindowBridge(win: BrowserWindow): void {
   win.on('hide', pushState)
   const disposeBridge = installDesktopBridge({
     windowState: () => windowStateOf(win),
-    flashFrame: (flag) => { win.flashFrame(flag) },
+    flashFrame: (flag) => {
+      if (!win.isDestroyed()) win.flashFrame(flag)
+    },
     notify: input => showNotification(input),
     send: (channel, payload) => {
       if (!win.webContents.isDestroyed()) win.webContents.send(channel, payload)

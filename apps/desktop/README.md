@@ -11,17 +11,13 @@ Prerequisites: a built backend and staged runtime. Run from the workspace root:
 ```sh
 pnpm run build && pnpm run build:web
 pnpm --filter @deepseek-ai/dsh-desktop assemble   # stage .runtime, .runtime-node, .runtime-pack
-pnpm --filter @deepseek-ai/dsh-desktop start      # launch the shell in dev (uses .runtime)
+pnpm --config.verify-deps-before-run=false --filter @deepseek-ai/dsh-desktop start  # launch using .runtime
 pnpm --filter @deepseek-ai/dsh-desktop dist       # build the portable exe into release/
 ```
 
 ## Windows: cold start from a fresh state
 
-The steps above run on a POSIX shell from the workspace root. On Windows PowerShell the
-`&&` separator and the `--filter ... start` deps-status check both get in the way: PowerShell
-rejects `&&` (use `;` or separate lines), and `pnpm --filter @deepseek-ai/dsh-desktop start`
-first runs `pnpm install --production`, whose root postinstall fails when dev dependencies are
-missing (Electron and lefthook are dev deps). Run the worksheet below instead:
+The steps above run on a POSIX shell from the workspace root. The worksheet below uses Windows PowerShell syntax and separate command lines. For subsequent launches and dependency recovery, see the [root README](../../README.md#run-the-windows-desktop-app).
 
 ```powershell
 # 1. Re-link all workspace dependencies (dev + prod), purging any stale tree.
@@ -39,9 +35,9 @@ pnpm run build
 pnpm run build:web
 pnpm --filter @deepseek-ai/dsh-desktop assemble
 
-# 4. Launch directly from the package (avoids the --filter deps-status check).
+# 4. Launch the installed Electron app.
 cd apps\desktop
-pnpm start
+npm start
 ```
 
 Step 2 is only needed on a machine where `apps\desktop\node_modules\electron\dist\electron.exe`
@@ -53,7 +49,7 @@ The portable exe is fully self-contained: it embeds the Electron runtime, the as
 
 ## Model Experience
 
-Users run one executable and get the full Web GUI. There is no environment setup, no browser to start, and no terminal; port allocation is automatic (`--port 0`). Closing the window stops the backend process tree. A `--port <n>` argument overrides the port for debugging; if the port is taken, an error dialog explains the failure.
+Users run one executable and get the full Web GUI. There is no environment setup, no browser to start, and no terminal; port allocation is automatic (`--port 0`). Closing the window stops the backend process tree and cancels pending taskbar flash timers. A `--port <n>` argument overrides the port for debugging; if the port is taken, an error dialog explains the failure.
 
 ## Configuration
 

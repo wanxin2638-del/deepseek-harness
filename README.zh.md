@@ -44,6 +44,34 @@ pnpm dsh web
 
 `pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
 
+<a id="run-the-windows-desktop-app"></a>
+
+### 运行 Windows 桌面应用
+
+首次使用时，先按[桌面配置指南](apps/desktop/README.zh.md#windows-cold-start-from-a-fresh-state)构建并暂存桌面运行时。依赖已安装、运行时已暂存后，在 CMD 或 PowerShell 中从仓库根目录执行：
+
+```cmd
+cd apps\desktop
+npm start
+```
+
+`npm start` 使用已安装的依赖执行 Electron 启动脚本。如需使用 pnpm，在 `apps/desktop` 目录执行：
+
+```cmd
+pnpm --config.verify-deps-before-run=false start
+```
+
+该 pnpm 参数只关闭本次启动前的依赖检查。在 pnpm 11.7.0 中，生产模式的工作区状态可能使该检查执行 `install --production`，移除 Electron 和 `lefthook` 等开发依赖。
+
+如果这些依赖已被移除，在启动前从仓库根目录恢复：
+
+```cmd
+pnpm install --prod=false --frozen-lockfile --config.confirmModulesPurge=false
+node apps/desktop/node_modules/electron/install.js
+```
+
+安装命令按现有锁文件恢复依赖；第二条命令确保 Electron 可执行文件可用。仅在依赖缺失时执行这些恢复命令。
+
 ## 社区与支持
 
 - 通过 [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions) 提交反馈或 bug 报告。

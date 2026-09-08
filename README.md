@@ -40,6 +40,32 @@ pnpm dsh web
 
 `pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
 
+### Run the Windows desktop app
+
+First build and stage the desktop runtime using the [desktop setup guide](apps/desktop/README.md#windows-cold-start-from-a-fresh-state). With dependencies installed and the runtime staged, run these commands from the repository root in CMD or PowerShell:
+
+```cmd
+cd apps\desktop
+npm start
+```
+
+`npm start` runs the Electron script using the installed dependencies. To use pnpm, run this command from `apps/desktop`:
+
+```cmd
+pnpm --config.verify-deps-before-run=false start
+```
+
+The pnpm option disables the dependency check for this launch. In pnpm 11.7.0, a production-mode workspace state can make the check run `install --production`, removing development dependencies such as Electron and `lefthook`.
+
+If those dependencies have been removed, restore them from the repository root before launching:
+
+```cmd
+pnpm install --prod=false --frozen-lockfile --config.confirmModulesPurge=false
+node apps/desktop/node_modules/electron/install.js
+```
+
+The install command restores dependencies from the existing lockfile; the second command ensures the Electron executable is available. Run these recovery commands only when dependencies are missing.
+
 ## Community and support
 
 - Submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).

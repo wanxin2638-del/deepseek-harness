@@ -11,13 +11,15 @@
 ```sh
 pnpm run build && pnpm run build:web
 pnpm --filter @deepseek-ai/dsh-desktop assemble   # stage .runtime, .runtime-node, .runtime-pack
-pnpm --filter @deepseek-ai/dsh-desktop start      # launch the shell in dev (uses .runtime)
+pnpm --config.verify-deps-before-run=false --filter @deepseek-ai/dsh-desktop start  # launch using .runtime
 pnpm --filter @deepseek-ai/dsh-desktop dist       # build the portable exe into release/
 ```
 
+<a id="windows-cold-start-from-a-fresh-state"></a>
+
 ## Windows：从全新状态冷启动
 
-上面的步骤从仓库根在 POSIX shell 下运行。在 Windows PowerShell 上，`&&` 分隔符与 `--filter ... start` 的 deps-status 检查都会碍事：PowerShell 拒绝 `&&`（改用 `;` 或分行），而 `pnpm --filter @deepseek-ai/dsh-desktop start` 会先运行 `pnpm install --production`，其根 postinstall 在缺少开发依赖（Electron 与 lefthook 都是 dev deps）时失败。请改跑下面的工作表：
+上面的步骤从仓库根在 POSIX shell 下运行。下面的步骤使用 Windows PowerShell 语法，各条命令分行执行。日常启动与依赖恢复方法见[根目录 README](../../README.zh.md#run-the-windows-desktop-app)。
 
 ```powershell
 # 1. Re-link all workspace dependencies (dev + prod), purging any stale tree.
@@ -35,10 +37,9 @@ pnpm run build
 pnpm run build:web
 pnpm --filter @deepseek-ai/dsh-desktop assemble
 
-# 4. Launch directly from the package (avoids the --filter deps-status check).
+# 4. Launch the installed Electron app.
 cd apps\desktop
-pnpm add -D lefthook -w
-pnpm start
+npm start
 ```
 
 第 2 步仅在 `apps\desktop\node_modules\electron\dist\electron.exe` 不存在的机器上需要；代理地址是你的本地 HTTP 代理，不是硬性要求。
@@ -49,7 +50,7 @@ pnpm start
 
 ## 模型体验
 
-用户运行一个可执行文件即得到完整 Web GUI。无需环境配置、无需启动浏览器、无需终端；端口自动分配（`--port 0`）。关闭窗口即停止后端进程树。`--port <n>` 参数可为调试覆盖端口；端口被占用时错误对话框说明失败。
+用户运行一个可执行文件即得到完整 Web GUI。无需环境配置、无需启动浏览器、无需终端；端口自动分配（`--port 0`）。关闭窗口即停止后端进程树，并取消待触发的任务栏闪烁定时器。`--port <n>` 参数可为调试覆盖端口；端口被占用时错误对话框说明失败。
 
 ## 配置
 

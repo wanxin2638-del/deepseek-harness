@@ -13,7 +13,7 @@ Windows 桌面壳（[apps/desktop](../../../../apps/desktop/README.zh.md)，Plan
 **壳经单条 IPC 通道暴露三个原语；触发源、策略与文案全部在 web profile 的 client 插件里。**
 
 1. **桥契约**（`apps/desktop/src/bridge/contract.ts` + `preload.cjs`）：单通道 `dsh:desktop-bridge` 承载 `notify({title, body, urgency})`、`flash(until-focus | duration)`、`flashClear()` 与 `windowState()`；main 侧校验 sender 来源（仅 loopback 页面）、载荷形状与长度上限，并拒绝标签样文本。渲染端全局是 `window.desktopBridge`，由 CommonJS preload 暴露（沙箱 preload 只能用 CommonJS —— `src/preload.cjs` 在构建时复制为 `lib/preload.cjs`）。
-2. **闪烁语义**（`FlashController`）：窗口聚焦清除一切闪烁；`until-focus` 无定时器，`duration` 到时自清。新闪烁取代旧闪烁。
+2. **闪烁语义**（`FlashController`）：窗口聚焦清除一切闪烁；`until-focus` 无定时器，`duration` 到时自清。新闪烁取代旧闪烁。窗口的 `closed` 事件移除 IPC 处理器、聚焦监听器和待触发的定时器；壳适配器在调用 `flashFrame` 前检查 `isDestroyed()`。清理绑定在 `closed` 上，因为 `close` 可以被取消。
 3. **插件**（`@deepseek-ai/dsh-client-desktop-integration`，web profile 的 `dsh.client` 行）：观测者骑在现有 client 通道上 —— 会话列表 store 取 `completed` 边沿（C1）与 `jobsBySession` 镜像（C4）、挂起交互注册表取审批（C2）、全局 `api-session/error` 转发取失败（C3）。每个动作先过插件 `Config` 策略（来源开关、`unfocusedOnly`、`completionMinDurationMs`、`dedupeWindowMs`、`quietHours`、闪烁时长）；没有 `window.desktopBridge` 时插件在创建任何订阅前短路（普通浏览器不受影响）。
 4. **C2 观测挂起交互注册表，不碰 `approval/request` 瀑布** —— `uiSession.pendingInteractions` 是只读全局可观测源，插件与 ui-approval 应答者无需排序关系。
 5. **C3 用全局 `api-session/error` 转发，不用逐会话事件流** —— host 在终态 `agent/error` 时发出；为非活动会话逐个开 `SessionEventStream`（每个都要拉历史页）成本线性放大，不可取。
