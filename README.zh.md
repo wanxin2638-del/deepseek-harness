@@ -79,6 +79,8 @@ node apps/desktop/node_modules/electron/install.js
 ### 从零构建并启动
 
 ```powershell
+$env:HTTPS_PROXY='http://127.0.0.1:7897'
+$env:HTTP_PROXY='http://127.0.0.1:7897'
 pnpm install --config.confirmModulesPurge=false
 pnpm --filter @deepseek-ai/dsh-desktop build
 pnpm run build
@@ -97,6 +99,8 @@ node node_modules\electron\install.js
 先完成构建与暂存，再执行便携式可执行文件打包：
 
 ```powershell
+$env:HTTPS_PROXY='http://127.0.0.1:7897'
+$env:HTTP_PROXY='http://127.0.0.1:7897'
 pnpm install --config.confirmModulesPurge=false
 pnpm --filter @deepseek-ai/dsh-desktop build
 pnpm run build
