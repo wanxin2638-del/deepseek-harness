@@ -20,7 +20,7 @@
     "build": "tsc -b && node scripts/copy-preload.mjs",
     "start": "electron .",
     "assemble": "node scripts/assemble.mjs",
-    "dist": "pnpm install && electron-builder --config electron-builder.yml"
+    "dist": "pnpm install && electron-builder --config electron-builder.yml --publish never"
   },
   "license": "MIT",
   "devDependencies": {

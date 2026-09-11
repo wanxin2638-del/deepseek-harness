@@ -10,6 +10,13 @@ files:
   - electron/resources/icon.png
   - "!**/*.map"
 asar: true
+nsis:
+  oneClick: false,
+  allowToChangeInstallationDirectory: true,
+  perMachine: true,
+  createDesktopShortcut: true,
+  createStartMenuShortcut: true
+
 npmRebuild: false
 extraResources:
   # The assembled backend closure (P1.4): require.resolve and native modules
