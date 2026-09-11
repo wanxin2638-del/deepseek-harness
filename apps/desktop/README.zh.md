@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-承载官方 DeepSeek Harness Web 后端（`dsh --profile web`）的 Windows 便携式 Electron 壳。壳是宿主而非插件：它拉起后端、解析就绪 URL、完成登录交换、约束导航，并在退出时清理子进程树。它不携带任何产品逻辑。
+承载官方 DeepSeek Harness Web 后端（`dsh --profile web`）的 Windows Electron 桌面壳。壳是宿主而非插件：它拉起后端、解析就绪 URL、完成登录交换、约束导航，并在退出时清理子进程树。它不携带任何产品逻辑。
 
 ## 用法
 
@@ -12,7 +12,7 @@
 pnpm run build && pnpm run build:web
 pnpm --filter @deepseek-ai/dsh-desktop assemble   # stage .runtime, .runtime-node, .runtime-pack
 pnpm --config.verify-deps-before-run=false --filter @deepseek-ai/dsh-desktop start  # launch using .runtime
-pnpm --filter @deepseek-ai/dsh-desktop dist       # build the portable exe into release/
+pnpm --filter @deepseek-ai/dsh-desktop dist       # build the Windows installer into release/
 ```
 
 <a id="windows-cold-start-from-a-fresh-state"></a>
@@ -51,7 +51,7 @@ npm start
 
 ## 模型体验
 
-用户运行一个可执行文件即得到完整 Web GUI。无需环境配置、无需启动浏览器、无需终端；端口自动分配（`--port 0`）。关闭窗口即停止后端进程树，并取消待触发的任务栏闪烁定时器。`--port <n>` 参数可为调试覆盖端口；端口被占用时错误对话框说明失败。
+用户运行安装后的应用即可得到完整 Web GUI。无需环境配置、无需启动浏览器、无需终端；端口自动分配（`--port 0`）。关闭窗口时，应用会询问是退出，还是继续运行在 Windows 系统托盘中；托盘菜单可以恢复窗口或退出应用。`--port <n>` 参数可为调试覆盖端口；端口被占用时错误对话框说明失败。
 
 ## 配置
 
@@ -61,8 +61,8 @@ npm start
 ## 已知限制
 
 - 打包的运行时闭包与独立 Node 由 `assemble` 按机暂存；`.runtime/`、`.runtime-node/`、`.runtime-pack/`、`release/` 都是 gitignored 构建产物，因此新克隆需再次运行 `assemble`。
-- 无代码签名、自动更新或正式图标；可执行文件未签名并使用默认 Electron 图标。
-- 便携 exe 约 220 MB（Electron 运行时 + 后端闭包 + 独立 Node）；打包用 `portable.useZip: true` 做单步解包，以体积换取在大文件杀软扫描可能竞态暂存副本的机器上的可靠冷启动。
+- 不包含自动更新；代码签名取决于构建环境。
+- Windows 安装包是自包含的，包含 Electron 运行时、后端闭包和独立 Node，因此体积较大。
 - 不支持 LAN 服务（web profile 拒绝 `--host 0.0.0.0`）。
 - 打包的 web profile 不支持终端/PTY、E2B 或 LSP（按其设计不在依赖闭包内）。
 

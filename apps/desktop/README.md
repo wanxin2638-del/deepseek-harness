@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Windows portable Electron shell hosting the official DeepSeek Harness Web backend (`dsh --profile web`). The shell is a host, not a plugin: it spawns the backend, resolves its ready URL, completes the login exchange, constrains navigation, and cleans up the child process tree on exit. It carries no product logic.
+Windows Electron desktop shell hosting the official DeepSeek Harness Web backend (`dsh --profile web`). The shell is a host, not a plugin: it spawns the backend, resolves its ready URL, completes the login exchange, constrains navigation, and cleans up the child process tree on exit. It carries no product logic.
 
 ## Usage
 
@@ -12,7 +12,7 @@ Prerequisites: a built backend and staged runtime. Run from the workspace root:
 pnpm run build && pnpm run build:web
 pnpm --filter @deepseek-ai/dsh-desktop assemble   # stage .runtime, .runtime-node, .runtime-pack
 pnpm --config.verify-deps-before-run=false --filter @deepseek-ai/dsh-desktop start  # launch using .runtime
-pnpm --filter @deepseek-ai/dsh-desktop dist       # build the portable exe into release/
+pnpm --filter @deepseek-ai/dsh-desktop dist       # build the Windows installer into release/
 ```
 
 ## Windows: cold start from a fresh state
@@ -50,7 +50,7 @@ The portable exe is fully self-contained: it embeds the Electron runtime, the as
 
 ## Model Experience
 
-Users run one executable and get the full Web GUI. There is no environment setup, no browser to start, and no terminal; port allocation is automatic (`--port 0`). Closing the window stops the backend process tree and cancels pending taskbar flash timers. A `--port <n>` argument overrides the port for debugging; if the port is taken, an error dialog explains the failure.
+Users run the installed application and get the full Web GUI. There is no environment setup, no browser to start, and no terminal; port allocation is automatic (`--port 0`). Closing the window asks whether to exit or keep the application running in the Windows system tray; the tray menu restores the window or exits the application. A `--port <n>` argument overrides the port for debugging; if the port is taken, an error dialog explains the failure.
 
 ## Configuration
 
@@ -60,8 +60,8 @@ Users run one executable and get the full Web GUI. There is no environment setup
 ## Known Limitations
 
 - The packaged runtime closure and standalone Node are staged per machine by `assemble`; `.runtime/`, `.runtime-node/`, `.runtime-pack/`, and `release/` are gitignored build products, so a fresh clone must run `assemble` again.
-- No code signing, auto-update, or production icon; the executable is unsigned and uses the default Electron icon.
-- The portable exe is ~220 MB (electron runtime + backend closure + standalone Node); packaging uses `portable.useZip: true` for single-step extraction, trading size for reliable cold start on machines where antivirus scanning of large payload files can race a staged copy.
+- No auto-update; code signing depends on the build environment.
+- The self-contained Windows installer is large because it embeds the Electron runtime, backend closure, and standalone Node.
 - No LAN serving (`--host 0.0.0.0` is rejected by the web profile).
 - No terminal/PTY, E2B, or LSP support in the packaged web profile (out of its dependency closure by design).
 

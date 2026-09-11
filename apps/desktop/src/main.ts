@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell } from 'electron'
+import { app, BrowserWindow, dialog, Menu, shell, Tray } from 'electron'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { assembledLaunchSpec, startBackend, systemNodePath, type BackendLaunchSpec, type BackendSession } from './backend.ts'
@@ -27,6 +27,10 @@ interface DesktopState {
 const state: DesktopState = {}
 
 let quitting = false
+
+let closePromptOpen = false
+
+let tray: Tray | undefined
 
 /** Set once the backend printed its ready URL; gates the onExit quit path. */
 let readyUrl: string | null = null
@@ -68,12 +72,64 @@ function failAndQuit(message: string): void {
   app.exit(1)
 }
 
+function appIconPath(): string {
+  return resolve(app.getAppPath(), 'electron', 'resources', 'icon.png')
+}
+
+function showWindow(win: BrowserWindow): void {
+  if (win.isDestroyed()) return
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+}
+
+function ensureTray(win: BrowserWindow): void {
+  if (tray !== undefined) return
+  tray = new Tray(appIconPath())
+  tray.setToolTip('DeepSeek Harness Desktop')
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Open DeepSeek Harness Desktop', click: () => { showWindow(win) } },
+    { type: 'separator' },
+    { label: 'Exit', click: () => { app.quit() } },
+  ]))
+  tray.on('click', () => { showWindow(win) })
+}
+
+function promptWindowClose(win: BrowserWindow, event: Electron.Event): void {
+  if (quitting) return
+  event.preventDefault()
+  if (closePromptOpen) return
+  closePromptOpen = true
+  void dialog.showMessageBox(win, {
+    type: 'question',
+    title: 'DeepSeek Harness Desktop',
+    message: 'Choose how to close the application.',
+    detail: 'You can exit the application or keep it running in the system tray.',
+    buttons: ['Minimize to tray', 'Exit'],
+    defaultId: 0,
+    cancelId: 0,
+  }).then(({ response }) => {
+    if (win.isDestroyed()) return
+    if (response === 1) {
+      app.quit()
+      return
+    }
+    ensureTray(win)
+    win.hide()
+  }).catch((error: unknown) => {
+    const reason = error instanceof Error ? error.message : String(error)
+    state.log?.write(`[main] close prompt failed: ${reason}\n`)
+  }).finally(() => {
+    closePromptOpen = false
+  })
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
     show: false,
-    icon: resolve(app.getAppPath(), 'electron', 'resources', 'icon.png'),
+    icon: appIconPath(),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -81,6 +137,7 @@ function createWindow(): void {
       preload: resolve(fileURLToPath(new URL('.', import.meta.url)), 'preload.cjs'),
     },
   })
+  win.on('close', (event) => { promptWindowClose(win, event) })
   win.once('ready-to-show', () => {
     win.show()
   })
@@ -159,10 +216,7 @@ if (!gotLock) {
 } else {
   app.on('second-instance', () => {
     const win = BrowserWindow.getAllWindows()[0]
-    if (win !== undefined) {
-      if (win.isMinimized()) win.restore()
-      win.focus()
-    }
+    if (win !== undefined) showWindow(win)
   })
 
   void app.whenReady().then(async () => {
@@ -203,6 +257,8 @@ if (!gotLock) {
 
   app.on('before-quit', () => {
     quitting = true
+    tray?.destroy()
+    tray = undefined
     state.session?.dispose()
   })
 }

@@ -4,17 +4,30 @@ import type { IpcMainInvokeEvent } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BRIDGE_CHANNEL } from '../src/bridge/contract.ts'
 
-const { createWindow, handle, removeHandler } = vi.hoisted(() => ({
-  createWindow: vi.fn(),
-  handle: vi.fn(),
-  removeHandler: vi.fn(),
-}))
+const { createWindow, handle, removeHandler, quit, showMessageBox, trayConstructor } = vi.hoisted(() => {
+  const tray = {
+    destroy: vi.fn(),
+    on: vi.fn(),
+    setContextMenu: vi.fn(),
+    setToolTip: vi.fn(),
+  }
+  return {
+    createWindow: vi.fn(),
+    handle: vi.fn(),
+    removeHandler: vi.fn(),
+    quit: vi.fn(),
+    showMessageBox: vi.fn(() => Promise.resolve({ response: 0 })),
+    tray,
+    trayConstructor: vi.fn(function () { return tray }),
+  }
+})
 
 vi.mock('electron', () => ({
   app: {
     requestSingleInstanceLock: () => true,
     on: vi.fn(),
     whenReady: () => Promise.resolve(),
+    quit,
     setAppUserModelId: vi.fn(),
     getAppPath: () => '/desktop-test',
     getPath: () => '/desktop-test',
@@ -22,7 +35,9 @@ vi.mock('electron', () => ({
   BrowserWindow: createWindow,
   ipcMain: { handle, removeHandler },
   Notification: {},
-  dialog: {},
+  dialog: { showMessageBox, showErrorBox: vi.fn() },
+  Menu: { buildFromTemplate: vi.fn(() => ({})) },
+  Tray: trayConstructor,
   shell: {},
 }))
 
@@ -41,6 +56,10 @@ function fakeWindow() {
     isVisible: () => true,
     isMinimized: () => false,
     isFocused: () => true,
+    focus: vi.fn(),
+    hide: vi.fn(),
+    restore: vi.fn(),
+    show: vi.fn(),
     flashFrame: vi.fn((_flag: boolean) => {
       if (destroyed) throw new TypeError('Object has been destroyed')
     }),
@@ -108,16 +127,38 @@ describe('desktop window close', () => {
     },
   )
 
-  it('keeps the bridge and focus clearing active when closing is cancelled', async () => {
+  it('keeps the bridge and focus clearing active when closing to the tray', async () => {
     const win = fakeWindow()
     createWindow.mockImplementation(function () { return win })
     await import('../src/main.ts')
-    win.emit('close', { preventDefault: vi.fn() })
+    const preventDefault = vi.fn()
+    win.emit('close', { preventDefault })
+    await Promise.resolve()
+    await Promise.resolve()
 
+    expect(preventDefault).toHaveBeenCalledOnce()
+    expect(showMessageBox).toHaveBeenCalledOnce()
+    expect(win.hide).toHaveBeenCalledOnce()
     expect(removeHandler).not.toHaveBeenCalled()
     expect(invoke({ op: 'flash', mode: { kind: 'duration', ms: 4000 } })).toEqual({ ok: true })
     win.emit('focus')
     expect(win.flashFrame.mock.calls).toEqual([[true], [false]])
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('quits when closing chooses exit', async () => {
+    showMessageBox.mockResolvedValue({ response: 1 })
+    const win = fakeWindow()
+    createWindow.mockImplementation(function () { return win })
+    await import('../src/main.ts')
+
+    const preventDefault = vi.fn()
+    win.emit('close', { preventDefault })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(preventDefault).toHaveBeenCalledOnce()
+    expect(quit).toHaveBeenCalledOnce()
+    expect(win.hide).not.toHaveBeenCalled()
   })
 })
