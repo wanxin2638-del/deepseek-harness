@@ -73,6 +73,7 @@ function createWindow(): void {
     width: 1200,
     height: 800,
     show: false,
+    icon: resolve(app.getAppPath(), 'electron', 'resources', 'icon.png'),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -167,7 +168,7 @@ if (!gotLock) {
   void app.whenReady().then(async () => {
     // Windows toast attribution: without an AppUserModelID the notification
     // center cannot pair toasts to this app (P2.1 risk table).
-    app.setAppUserModelId('com.deepseek-ai.dsh-desktop')
+    app.setAppUserModelId('ai.deepseek.dsh-desktop')
     const logsDir = resolve(app.getPath('userData'), 'logs')
     state.log = fileLog(logsDir, 'main.log')
     state.backendLog = fileLog(logsDir, 'backend.log')

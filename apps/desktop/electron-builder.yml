@@ -7,6 +7,7 @@ directories:
 files:
   - lib/**/*
   - package.json
+  - electron/resources/icon.png
   - "!**/*.map"
 asar: true
 npmRebuild: false
@@ -24,8 +25,9 @@ extraResources:
   - from: .runtime-node/node.exe
     to: node/node.exe
 win:
+  icon: electron/resources/icon.png
   target:
-    - portable
+    - nsis
 # Direct File /r embedding instead of the staged Nsis7z extract + CopyFiles
 # path, which intermittently dropped the 85 MB node.exe during first launch.
 portable:

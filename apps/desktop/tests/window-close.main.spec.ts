@@ -16,6 +16,7 @@ vi.mock('electron', () => ({
     on: vi.fn(),
     whenReady: () => Promise.resolve(),
     setAppUserModelId: vi.fn(),
+    getAppPath: () => '/desktop-test',
     getPath: () => '/desktop-test',
   },
   BrowserWindow: createWindow,
