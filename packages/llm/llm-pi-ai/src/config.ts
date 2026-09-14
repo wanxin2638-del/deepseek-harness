@@ -78,6 +78,7 @@ export const DEFAULT_INPUT: readonly PiAiModality[] = ['text']
 /** Provider-specific session headers required by an installed provider protocol. */
 const PROVIDER_SESSION_HEADERS: Readonly<Record<string, string>> = {
   'opencode-go': 'x-opencode-session',
+  'opencode-custom': 'x-opencode-session',
 }
 
 export type {
