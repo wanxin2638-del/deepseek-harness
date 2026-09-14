@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-11-desktop-close-to-system-tray.md
+2026-09-11-desktop-close-to-system-tray.md: 9bb6d57dd0a29653d9a1bed891e72ee5422811fa
+2026-09-11-desktop-close-to-system-tray.zh.md: 2ec352b583f0978b16e4fa8c044f0d4dae7ab6db
