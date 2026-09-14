@@ -130,6 +130,7 @@ function createWindow(): void {
     height: 800,
     show: false,
     icon: appIconPath(),
+    autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
